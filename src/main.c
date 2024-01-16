@@ -1,9 +1,18 @@
+#include <stddef.h>
 #include <stdio.h>
 
-int main() {
-	[[maybe_unused]] constexpr auto c23test = 23;
+#include <cli.h>
+#include <utils.h>
 
-	printf("Hello World\n");
+int main() {
+	cli_println("input something pls");
+
+	char line[CLI_LINESZ];
+
+	if (!cli_readline(line))
+		die(1, "Couldn't read line");
+	
+	
 
 	return 0;
 }
