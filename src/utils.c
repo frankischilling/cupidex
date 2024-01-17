@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+
 
 #include "utils.h"
 
@@ -33,30 +35,17 @@ void create_file(const char *filename) {
 
 //TODO replace edit_file by calling the system editor
 void edit_file(const char *filename) {
-    FILE *f = fopen(filename, "r");
-    if (f != NULL) {
-        char buffer[1024];
-        while (fgets(buffer, sizeof(buffer), f) != NULL) {
-            printf("%s", buffer);
-        }
+    // Use the system default text editor to open the file
+    char command[256];
+    snprintf(command, sizeof(command), "%s %s", EDITOR_COMMAND, filename);
 
-        // Close the file
-        fclose(f);
+    int result = system(command);
 
-        // Open the file again for writing
-        f = fopen(filename, "a");
-        if (f != NULL) {
-            // Allow user to add text to the file
-            printf("\nEnter new content (Ctrl+D to save and exit):\n");
-            while (fgets(buffer, sizeof(buffer), stdin) != NULL) {
-                fprintf(f, "%s", buffer);
-            }
-
-            // Close the file
-            fclose(f);
-        } else {
-            printf("Error: Unable to open file.\n");
-        }
-
+    if (result == -1) {
+        // Error launching the editor
+        printf("Error: Unable to open the system default editor.\n");
+    } else if (WIFEXITED(result) && WEXITSTATUS(result) != 0) {
+        // The editor exited with a non-zero status, indicating an issue
+        printf("Error: The system default editor returned a non-zero status.\n");
     }
 }

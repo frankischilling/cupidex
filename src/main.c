@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdio.h>
+#include <sys/wait.h>
 
 #include <cli.h>
 #include <utils.h>
