@@ -35,17 +35,36 @@ void create_file(const char *filename) {
 
 //TODO replace edit_file by calling the system editor
 void edit_file(const char *filename) {
-    // Use the system default text editor to open the file
-    char command[256];
-    snprintf(command, sizeof(command), "%s %s", EDITOR_COMMAND, filename);
+    const char *editor = getenv("EDITOR");
 
-    int result = system(command);
+    // Use the default text editor from the environment variable if set
+    if (editor != NULL && editor[0] != '\0') {
+        // Use the system default text editor to open the file
+        char command[256];
+        snprintf(command, sizeof(command), "%s %s", editor, filename);
 
-    if (result == -1) {
-        // Error launching the editor
-        printf("Error: Unable to open the system default editor.\n");
-    } else if (WIFEXITED(result) && WEXITSTATUS(result) != 0) {
-        // The editor exited with a non-zero status, indicating an issue
-        printf("Error: The system default editor returned a non-zero status.\n");
+        int result = system(command);
+
+        if (result == -1) {
+            // Error launching the editor
+            printf("Error: Unable to open the editor specified in the EDITOR environment variable.\n");
+        } else if (WIFEXITED(result) && WEXITSTATUS(result) != 0) {
+            // The editor exited with a non-zero status, indicating an issue
+            printf("Error: The editor specified in the EDITOR environment variable returned a non-zero status.\n");
+        }
+    } else {
+        // Use the default editor specified by a macro as a last resort
+        char command[256];
+        snprintf(command, sizeof(command), "%s %s", EDITOR_COMMAND, filename);
+
+        int result = system(command);
+
+        if (result == -1) {
+            // Error launching the default editor
+            printf("Error: Unable to open the default editor.\n");
+        } else if (WIFEXITED(result) && WEXITSTATUS(result) != 0) {
+            // The default editor exited with a non-zero status, indicating an issue
+            printf("Error: The default editor returned a non-zero status.\n");
+        }
     }
 }
