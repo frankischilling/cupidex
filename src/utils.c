@@ -6,8 +6,6 @@
 
 #include "utils.h"
 
-
-[[noreturn]]
 void die(int r, const char *format, ...) {
 	fprintf(stderr, "The program used die()\n");
 	fprintf(stderr, "The last errno was %d/%s\n", errno, strerror(errno));

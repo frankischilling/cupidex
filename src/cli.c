@@ -13,10 +13,12 @@ bool cli_readline(char buf[static CLI_LINESZ]) {
 	return true;
 }
 
-bool cli_println(const char *format, ...) {
+void cli_println(const char *format, ...) {
+	printf(">");
+
 	va_list args;
 	va_start(args, format);
-	vfprintf(stdout, format, args);
+	vprintf(format, args);
 	va_end(args);
 
 	printf("\n");

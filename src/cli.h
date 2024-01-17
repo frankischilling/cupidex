@@ -5,6 +5,6 @@
 [[nodiscard("false is returned in case of error")]]
 bool cli_readline(char[static CLI_LINESZ]);
 
-bool cli_println(const char *, ...);
+void cli_println(const char *, ...);
 
 
