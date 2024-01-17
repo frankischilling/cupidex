@@ -25,7 +25,7 @@ void die(int r, const char *format, ...) {
 
 void create_file(const char *filename) {
     FILE *f = fopen(filename, "w");
-    if (nullptr == f)
+    if (f == NULL)
         die(1, "Couldn't create file %s", filename);
     fclose(f);
 }
