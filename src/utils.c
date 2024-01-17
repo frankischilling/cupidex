@@ -30,6 +30,8 @@ void create_file(const char *filename) {
     fclose(f);
 }
 
+
+//TODO replace edit_file by calling the system editor
 void edit_file(const char *filename) {
     FILE *f = fopen(filename, "r");
     if (f != NULL) {
