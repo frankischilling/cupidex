@@ -22,3 +22,39 @@ void die(int r, const char *format, ...) {
 	exit(r);
 }
 
+
+void create_file(const char *filename) {
+    FILE *f = fopen(filename, "w");
+    if (nullptr == f)
+        die(1, "Couldn't create file %s", filename);
+    fclose(f);
+}
+
+void edit_file(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    if (f != NULL) {
+        char buffer[1024];
+        while (fgets(buffer, sizeof(buffer), f) != NULL) {
+            printf("%s", buffer);
+        }
+
+        // Close the file
+        fclose(f);
+
+        // Open the file again for writing
+        f = fopen(filename, "a");
+        if (f != NULL) {
+            // Allow user to add text to the file
+            printf("\nEnter new content (Ctrl+D to save and exit):\n");
+            while (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+                fprintf(f, "%s", buffer);
+            }
+
+            // Close the file
+            fclose(f);
+        } else {
+            printf("Error: Unable to open file.\n");
+        }
+
+    }
+}
