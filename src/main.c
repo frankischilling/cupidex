@@ -10,20 +10,19 @@
 #define MAX_PATH_LENGTH 256
 #define MAX_DISPLAY_LENGTH 32
 
-int is_hidden(const char *filename) {
+bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
 }
 
-int is_directory(const char *path, const char *filename) {
+bool is_directory(const char *path, const char *filename) {
     struct stat path_stat;
     char full_path[MAX_PATH_LENGTH];
     snprintf(full_path, sizeof(full_path), "%s/%s", path, filename);
 
-    if (stat(full_path, &path_stat) == 0) {
+    if (stat(full_path, &path_stat) == 0)
         return S_ISDIR(path_stat.st_mode);
-    }
 
-    return 0;
+    return true;
 }
 
 void draw_directory_window(WINDOW *window, const char *directory, const char **files, int num_files, int selected_entry, int start_entry, int end_entry) {
@@ -42,6 +41,7 @@ void draw_directory_window(WINDOW *window, const char *directory, const char **f
         const char *extension = strrchr(current_name, '.');
 
         // Truncate file names that exceed the window width
+	[[maybe_unused]]
         int max_display_length = COLS - 6;  // Adjusted to leave space for potential border
 
         if (strlen(current_name) > MAX_DISPLAY_LENGTH) {
