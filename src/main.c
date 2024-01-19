@@ -56,7 +56,7 @@ void draw_directory_window(WINDOW *window, const char *directory, ArraySlice fil
                 mvwprintw(window, i + 4, 2, "%.*s...", MAX_DISPLAY_LENGTH - 3, current_name);
             }
         } else {
-            if (i == selected_entry) {
+            if (files_slice.start + i == selected_entry) {
                 wattron(window, A_REVERSE);
                 mvwprintw(window, i + 4, 2, "%s", current_name);
                 wattroff(window, A_REVERSE);
@@ -101,7 +101,7 @@ void draw_preview_window(WINDOW *window, const char *filename, const char *conte
 void navigate_up(int* selected_entry, int* start_entry, int* end_entry) {
     if (*selected_entry > 0) {
         (*selected_entry)--;
-        if (*selected_entry < *start_entry) {
+        while (*selected_entry < *start_entry) {
             (*start_entry)--;
             (*end_entry)--;
         }
@@ -109,9 +109,10 @@ void navigate_up(int* selected_entry, int* start_entry, int* end_entry) {
 }
 
 void navigate_down(int* selected_entry, int num_files, int* start_entry, int* end_entry) {
-    if (*selected_entry < num_files - 1) {
+    // num_files - 1 could cause an overflow if an unsigned type was being used
+    if (*selected_entry + 1 < num_files) {
         (*selected_entry)++;
-        if (*selected_entry >= *end_entry) {
+        while (*selected_entry >= *end_entry) {
             (*start_entry)++;
             (*end_entry)++;
         }
@@ -206,6 +207,8 @@ void navigate_right(const char **current_directory, const char *selected_entry, 
     }
 }
 
+
+// TODO: make it adapt itself when the screen gets resized
 int main() {
     WINDOW *mainwin;
     initscr();
@@ -298,19 +301,17 @@ int main() {
             switch (ch) {
                 case KEY_UP:
                     // Move up in the active window
-                    if (active_window == 1) {
+                    if (active_window == 1)
                         navigate_up(&selected_entry_dir, &start_entry_dir, &end_entry_dir);
-                    } else {
+                    else
                         navigate_up(&selected_entry_preview, &start_entry_preview, &end_entry_preview);
-                    }
                     break;
                 case KEY_DOWN:
                     // Move down in the active window
-                    if (active_window == 1) {
+                    if (active_window == 1)
                         navigate_down(&selected_entry_dir, num_files, &start_entry_dir, &end_entry_dir);
-                    } else {
+                    else
                         navigate_down(&selected_entry_preview, num_files, &start_entry_preview, &end_entry_preview);
-                    }
                     break;
                 case KEY_LEFT:
                     // Navigate left (go up in the directory tree)
@@ -362,9 +363,12 @@ int main() {
         // Draw the preview window
         draw_preview_window(previewwin, filename, content);
 
+	    mvprintw(1, 1, "%d %d %d %d", selected_entry_dir, num_files, start_entry_dir, end_entry_dir);
+
         // Refresh the main window
         wrefresh(mainwin);
     }
+
 
     // Free allocated memory for file names
     for (int i = 0; i < num_files; ++i) {
