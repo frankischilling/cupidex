@@ -13,6 +13,14 @@
 #define MAX_DISPLAY_LENGTH 32
 
 
+typedef struct {
+    SIZE start;
+    SIZE cursor;
+    SIZE num_lines;
+    SIZE num_files;
+} CursorAndSlice;
+
+
 bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
 }
@@ -47,11 +55,11 @@ void draw_directory_window(
     // Display files in the directory within the visible range
     for (SIZE i = 0; i < files_len; i++) {
     	const char *current_name = files[i];
-	// Get the extension-related stuff separated
+        // Get the extension-related stuff separated
         const char *extension = strrchr(current_name, '.');
 
         // Truncate file names that exceed the window width
-	[[maybe_unused]]
+        [[maybe_unused]]
         SIZE max_display_length = COLS - 6;  // Adjusted to leave space for potential border
 
         if (strlen(current_name) > MAX_DISPLAY_LENGTH) {
@@ -103,13 +111,24 @@ void draw_preview_window(WINDOW *window, const char *filename, const char *conte
     wrefresh(window);
 }
 
+
+void fix_cursor(CursorAndSlice *cas) {
+    cas->cursor = MAX(0, cas->cursor);
+    cas->cursor = MIN(cas->cursor, cas->num_files - 1);
+
+    cas->start = MIN(cas->start, cas->cursor);
+    if (cas->start + cas->num_lines < cas->cursor)
+        cas->start = cas->cursor - cas->num_lines;
+}
+
 void navigate_up(SIZE* selected_entry, SIZE* start_entry, SIZE* end_entry) {
     if (*selected_entry > 0) {
         (*selected_entry)--;
-        while (*selected_entry < *start_entry) {
-            (*start_entry)--;
-            (*end_entry)--;
-        }
+        CursorAndSlice cas = {*start_entry, *selected_entry, *end_entry - *start_entry, 100000};
+        fix_cursor(&cas);
+        *start_entry = cas.start;
+        *selected_entry = cas.cursor;
+        *end_entry = cas.start + cas.num_lines;
     }
 }
 
@@ -117,10 +136,11 @@ void navigate_down(SIZE* selected_entry, SIZE num_files, SIZE* start_entry, SIZE
     // num_files - 1 could cause an overflow if an unsigned type was being used
     if (*selected_entry + 1 < num_files) {
         (*selected_entry)++;
-        while (*selected_entry >= *end_entry) {
-            (*start_entry)++;
-            (*end_entry)++;
-        }
+        CursorAndSlice cas = {*start_entry, *selected_entry, *end_entry - *start_entry, num_files};
+        fix_cursor(&cas);
+        *start_entry = cas.start;
+        *selected_entry = cas.cursor;
+        *end_entry = cas.start + cas.num_lines;
     }
 }
 
@@ -367,7 +387,7 @@ int main() {
         // Draw the preview window
         draw_preview_window(previewwin, filename, content);
 
-	    mvprintw(1, 1, "%d %d %d %d", selected_entry_dir, num_files, start_entry_dir, end_entry_dir);
+        mvprintw(1, 1, "%d %d %d %d", selected_entry_dir, num_files, start_entry_dir, end_entry_dir);
 
         // Refresh the main window
         wrefresh(mainwin);
