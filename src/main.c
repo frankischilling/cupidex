@@ -117,31 +117,17 @@ void fix_cursor(CursorAndSlice *cas) {
     cas->cursor = MIN(cas->cursor, cas->num_files - 1);
 
     cas->start = MIN(cas->start, cas->cursor);
-    if (cas->start + cas->num_lines < cas->cursor)
-        cas->start = cas->cursor - cas->num_lines;
+    cas->start = MAX(cas->start, cas->cursor + 1 - cas->num_lines);
 }
 
-void navigate_up(SIZE* selected_entry, SIZE* start_entry, SIZE* end_entry) {
-    if (*selected_entry > 0) {
-        (*selected_entry)--;
-        CursorAndSlice cas = {*start_entry, *selected_entry, *end_entry - *start_entry, 100000};
-        fix_cursor(&cas);
-        *start_entry = cas.start;
-        *selected_entry = cas.cursor;
-        *end_entry = cas.start + cas.num_lines;
-    }
+void navigate_up(CursorAndSlice *cas) {
+    cas->cursor -= 1;
+    fix_cursor(cas);
 }
 
-void navigate_down(SIZE* selected_entry, SIZE num_files, SIZE* start_entry, SIZE* end_entry) {
-    // num_files - 1 could cause an overflow if an unsigned type was being used
-    if (*selected_entry + 1 < num_files) {
-        (*selected_entry)++;
-        CursorAndSlice cas = {*start_entry, *selected_entry, *end_entry - *start_entry, num_files};
-        fix_cursor(&cas);
-        *start_entry = cas.start;
-        *selected_entry = cas.cursor;
-        *end_entry = cas.start + cas.num_lines;
-    }
+void navigate_down(CursorAndSlice *cas) {
+    cas->cursor += 1;
+    fix_cursor(cas);
 }
 
 void navigate_left(const char **current_directory, const char *parent_directory, const char ***files, SIZE *num_files) {
@@ -311,13 +297,32 @@ int main() {
     // Dummy filename and content for demonstration
     const char *filename = "";  // You can set a default filename if needed
     const char *content = "This is a placeholder content.";  // You can set default content if needed
-    SIZE selected_entry_dir = 0;
-    SIZE start_entry_dir = 0;  // Index of the first visible entry in the directory window
-    SIZE end_entry_dir = LINES - 6;  // Index of the last visible entry in the directory window
 
-    SIZE start_entry_preview = 0;  // Index of the first visible entry in the preview window
-    SIZE end_entry_preview = LINES - 6;  // Index of the last visible entry in the preview window
-    SIZE selected_entry_preview = 0;
+
+    CursorAndSlice dir_window_cas = {
+        // Previously called start_entry_dir
+        .start = 0,
+        // Previously called selected_entry_dir
+        .cursor = 0,
+        // What used to be end_entry_dir was LINES - 6, and it represented the
+        // last valid entry. Therefore the length is LINES - 6 + 1 - start
+        .num_lines = LINES - 5,
+        // Used for cursor validation
+        .num_files = num_files,
+    };
+
+    CursorAndSlice preview_window_cas = {
+        // Previously called start_entry_preview
+        .start = 0,
+        // Previously called selected_entry_preview
+        .cursor = 0,
+        // What used to be end_entry_preview was LINES - 6, and it represented
+        // the last valid entry. Therefore the length is LINES - 6 + 1 - start
+        .num_lines = LINES - 5,
+        // FIXME: I don't think it should be validated by the number of files
+        //        since it isn't the dir window
+        .num_files = num_files,
+    };
 
     enum {
         DIRECTORY_WIN_ACTIVE = 1,
@@ -333,16 +338,16 @@ int main() {
                 case KEY_UP:
                     // Move up in the active window
                     if (active_window == DIRECTORY_WIN_ACTIVE)
-                        navigate_up(&selected_entry_dir, &start_entry_dir, &end_entry_dir);
+                        navigate_up(&dir_window_cas);
                     else
-                        navigate_up(&selected_entry_preview, &start_entry_preview, &end_entry_preview);
+                        navigate_up(&preview_window_cas);
                     break;
                 case KEY_DOWN:
                     // Move down in the active window
                     if (active_window == DIRECTORY_WIN_ACTIVE)
-                        navigate_down(&selected_entry_dir, num_files, &start_entry_dir, &end_entry_dir);
+                        navigate_down(&dir_window_cas);
                     else
-                        navigate_down(&selected_entry_preview, num_files, &start_entry_preview, &end_entry_preview);
+                        navigate_down(&preview_window_cas);
                     break;
                 case KEY_LEFT:
                     // Navigate left (go up in the directory tree)
@@ -352,27 +357,35 @@ int main() {
                     // ...
 
                     // Reset selected entries and scroll positions
-                    selected_entry_dir = 0;
-                    start_entry_dir = 0;
-                    end_entry_dir = LINES - 6;
-                    selected_entry_preview = 0;
-                    start_entry_preview = 0;
-                    end_entry_preview = LINES - 6;
+                    dir_window_cas.cursor    = 0;
+                    dir_window_cas.start     = 0;
+                    dir_window_cas.num_lines = LINES - 5;
+                    dir_window_cas.num_files = num_files;
+                    preview_window_cas.cursor    = 0;
+                    preview_window_cas.start     = 0;
+                    preview_window_cas.num_lines = LINES - 5;
+                    preview_window_cas.num_files = num_files;
                     break;
                 case KEY_RIGHT:
                     // Navigate right (go into the selected directory)
-                    navigate_right(&current_directory, files[selected_entry_dir], &files, &num_files);
+                    navigate_right(
+                        &current_directory,
+                        files[dir_window_cas.cursor], &files,
+                        &num_files
+                    );
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
                     // ...
 
-                    // Reset selected entries and scroll positions
-                    selected_entry_dir = 0;
-                    start_entry_dir = 0;
-                    end_entry_dir = LINES - 6;
-                    selected_entry_preview = 0;
-                    start_entry_preview = 0;
-                    end_entry_preview = LINES - 6;
+                    // FIXME: repeated code
+                    dir_window_cas.cursor    = 0;
+                    dir_window_cas.start     = 0;
+                    dir_window_cas.num_lines = LINES - 5;
+                    dir_window_cas.num_files = num_files;
+                    preview_window_cas.cursor    = 0;
+                    preview_window_cas.start     = 0;
+                    preview_window_cas.num_lines = LINES - 5;
+                    preview_window_cas.num_files = num_files;
                     break;
                 default:
                     // Print the key code for debugging purposes
@@ -384,15 +397,17 @@ int main() {
         // Draw the directory window
         draw_directory_window(
             dirwin, current_directory,
-            &files[start_entry_dir],
-            MIN(end_entry_dir + 1, num_files) - start_entry_dir,
-            selected_entry_dir - start_entry_dir
+            &files[dir_window_cas.start],
+            // TODO: make sure that its impossible for num_lines to get past
+            //       num_files.
+            MIN(dir_window_cas.num_lines, num_files - dir_window_cas.start),
+            dir_window_cas.cursor - dir_window_cas.start
         );
 
         // Draw the preview window
         draw_preview_window(previewwin, filename, content);
 
-        mvprintw(1, 1, "%d %d %d %d", selected_entry_dir, num_files, start_entry_dir, end_entry_dir);
+        mvprintw(1, 1, "%d %d %d %d", dir_window_cas.cursor, dir_window_cas.num_files, dir_window_cas.start, dir_window_cas.num_lines);
 
         // Refresh the main window
         wrefresh(mainwin);
