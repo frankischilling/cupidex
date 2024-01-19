@@ -27,16 +27,6 @@ bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
 }
 
-bool is_directory(const char *path, const char *filename) {
-    struct stat path_stat;
-    char full_path[MAX_PATH_LENGTH];
-    snprintf(full_path, sizeof(full_path), "%s/%s", path, filename);
-
-    if (stat(full_path, &path_stat) == 0)
-        return S_ISDIR(path_stat.st_mode);
-
-    return true;
-}
 
 
 
@@ -78,10 +68,8 @@ void draw_directory_window(
         } else {
             mvwprintw(window, i + 4, 2, "%s", current_name);
 
-            // Check if it's a directory
-            bool is_dir = is_directory(directory, current_name);
 
-            if (is_dir) {
+            if (FileAttr_is_dir(files[i])) {
                 // Print an indicator for directories
                 mvwprintw(window, i + 4, MAX_DISPLAY_LENGTH + 2, "[DIR]");
             } else if (extension) {

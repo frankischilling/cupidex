@@ -21,6 +21,10 @@ const char *FileAttr_get_name(FileAttr fa) {
     return fa->name;
 }
 
+bool FileAttr_is_dir(FileAttr fa) {
+    return fa->is_dir;
+}
+
 FileAttr mk_attr(const char *name, bool is_dir, ino_t inode) {
     FileAttr fa = malloc(sizeof(struct FileAttributes));
 
@@ -42,7 +46,9 @@ void append_files_to_vec(Vector *v, const char *name) {
             if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 Vector_add(v, 1);
                 v->el[Vector_len(*v)] = mk_attr(
-                    entry->d_name, false, entry->d_ino
+                    entry->d_name,
+                    is_directory(name, entry->d_name),
+                    entry->d_ino
                 );
                 Vector_set_len(v, Vector_len(*v) + 1);
             }

@@ -6,5 +6,6 @@
 typedef struct FileAttributes* FileAttr;
 
 const char *FileAttr_get_name(FileAttr fa);
+bool FileAttr_is_dir(FileAttr fa);
 void append_files_to_vec(Vector *v, const char *name);
 

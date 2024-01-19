@@ -7,6 +7,8 @@
 #include <dirent.h>
 #include <curses.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "utils.h"
 
@@ -140,5 +142,16 @@ void preview_file(const char *filename) {
 
     endwin();
     fclose(file);
+}
+
+bool is_directory(const char *path, const char *filename) {
+    struct stat path_stat;
+    char full_path[MAX_PATH_LENGTH];
+    snprintf(full_path, sizeof(full_path), "%s/%s", path, filename);
+
+    if (stat(full_path, &path_stat) == 0)
+        return S_ISDIR(path_stat.st_mode);
+
+    return true;
 }
 
