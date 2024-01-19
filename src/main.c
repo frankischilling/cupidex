@@ -21,7 +21,11 @@ typedef struct {
     SIZE num_files;
 } CursorAndSlice;
 
-
+typedef struct {
+    char* filename;
+    bool is_directory;
+    ino_t inode;
+} FileAttributes;
 
 bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
@@ -50,7 +54,11 @@ void append_files_to_vec(Vector *v, const char *name) {
             // Filter out "." and ".." entries
             if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 Vector_add(v, 1);
-                v->el[Vector_len(*v)] = strdup(entry->d_name);
+                FileAttributes* fileAttr = malloc(sizeof(FileAttributes));
+                fileAttr->filename = strdup(entry->d_name);
+                fileAttr->inode = entry->d_ino;
+                // populate other attributes as needed
+                v->el[Vector_len(*v)] = fileAttr;
                 Vector_set_len(v, Vector_len(*v) + 1);
             }
         }
@@ -60,11 +68,12 @@ void append_files_to_vec(Vector *v, const char *name) {
 
 
 void draw_directory_window(
-	WINDOW *window,
-	const char *directory,
-	char **files,
-	SIZE files_len,
-	SIZE selected_entry
+    WINDOW *window,
+    const char *directory,
+    Vector *files,
+    SIZE files_len,
+    SIZE selected_entry,
+    CursorAndSlice dir_window_cas
 ) {
     // Clear the window
     werase(window);
@@ -77,7 +86,7 @@ void draw_directory_window(
 
     // Display files in the directory within the visible range
     for (SIZE i = 0; i < files_len; i++) {
-    	const char *current_name = files[i];
+        const char *current_name = ((FileAttributes *)files->el[dir_window_cas.start + i])->filename;
         // Get the extension-related stuff separated
         const char *extension = strrchr(current_name, '.');
 
@@ -143,6 +152,13 @@ void fix_cursor(CursorAndSlice *cas) {
     cas->start = MAX(cas->start, cas->cursor + 1 - cas->num_lines);
 }
 
+void reload_directory(Vector *files, const char *current_directory) {
+    // Empties the vector
+    Vector_set_len(files, 0);
+    // Reads the filenames
+    append_files_to_vec(files, current_directory);
+}
+
 void navigate_up(CursorAndSlice *cas) {
     cas->cursor -= 1;
     fix_cursor(cas);
@@ -157,31 +173,21 @@ void navigate_left(char **current_directory, const char *parent_directory, Vecto
     if (strcmp(*current_directory, parent_directory) != 0) {
         free(*current_directory);
         *current_directory = strdup(parent_directory);
-
-        // Empties the vector
-        Vector_set_len(files, 0);
-        // Reads the filenames
-        append_files_to_vec(files, *current_directory);
+        reload_directory(files, *current_directory);
     }
 }
 
 void navigate_right(char **current_directory, const char *selected_entry, Vector *files) {
     // Check if the selected entry is a directory
     if (is_directory(*current_directory, selected_entry)) {
-        // Change to the selected directory
         char new_path[MAX_PATH_LENGTH];
-        // TODO: verify on docs if snprintf always writes the null byte
         snprintf(new_path, sizeof(new_path), "%s/%s", *current_directory, selected_entry);
 
         free(*current_directory);
         *current_directory = strdup(new_path);
-
-        Vector_set_len(files, 0);
-        append_files_to_vec(files, *current_directory);
+        reload_directory(files, *current_directory);
     }
 }
-
-
 
 // TODO: make it adapt itself when the screen gets resized
 int main() {
@@ -294,25 +300,22 @@ int main() {
                     // ...
 
                     // Reset selected entries and scroll positions
-                    dir_window_cas.cursor    = preview_window_cas.cursor    = 0;
-                    dir_window_cas.start     = preview_window_cas.start     = 0;
+                    dir_window_cas.cursor = preview_window_cas.cursor = 0;
+                    dir_window_cas.start = preview_window_cas.start = 0;
                     dir_window_cas.num_lines = preview_window_cas.num_lines = LINES - 5;
                     dir_window_cas.num_files = preview_window_cas.num_files = Vector_len(files);
                     break;
                 case KEY_RIGHT:
                     // Navigate right (go into the selected directory)
-                    navigate_right(
-                        &current_directory,
-                        files.el[dir_window_cas.cursor],
-                        &files
-                    );
+                    navigate_right(&current_directory, ((FileAttributes *)files.el[dir_window_cas.cursor])->filename, &files);
+
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
                     // ...
 
                     // FIXME: repeated code
-                    dir_window_cas.cursor    = preview_window_cas.cursor    = 0;
-                    dir_window_cas.start     = preview_window_cas.start     = 0;
+                    dir_window_cas.cursor = preview_window_cas.cursor = 0;
+                    dir_window_cas.start = preview_window_cas.start = 0;
                     dir_window_cas.num_lines = preview_window_cas.num_lines = LINES - 5;
                     dir_window_cas.num_files = preview_window_cas.num_files = Vector_len(files);
                     break;
@@ -326,11 +329,12 @@ int main() {
         // Draw the directory window
         draw_directory_window(
             dirwin, current_directory,
-            (char **)&files.el[dir_window_cas.start],
+            &files,
             // TODO: make sure that its impossible for num_lines to get past
             //       num_files.
             MIN(dir_window_cas.num_lines, dir_window_cas.num_files - dir_window_cas.start),
-            dir_window_cas.cursor - dir_window_cas.start
+            dir_window_cas.cursor - dir_window_cas.start,
+            dir_window_cas
         );
 
         // Draw the preview window
