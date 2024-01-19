@@ -28,8 +28,6 @@ bool is_hidden(const char *filename) {
 }
 
 
-
-
 void draw_directory_window(
     WINDOW *window,
     const char *directory,
@@ -105,8 +103,8 @@ void draw_preview_window(WINDOW *window, const char *filename, const char *conte
 
 
 void fix_cursor(CursorAndSlice *cas) {
-    cas->cursor = MAX(0, cas->cursor);
     cas->cursor = MIN(cas->cursor, cas->num_files - 1);
+    cas->cursor = MAX(0, cas->cursor);
 
     cas->start = MIN(cas->start, cas->cursor);
     cas->start = MAX(cas->start, cas->cursor + 1 - cas->num_lines);
