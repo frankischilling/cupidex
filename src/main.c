@@ -7,7 +7,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include <arrayslice.h>
 #include <utils.h>
 
 #define MAX_PATH_LENGTH 256
@@ -29,7 +28,7 @@ bool is_directory(const char *path, const char *filename) {
     return true;
 }
 
-void draw_directory_window(WINDOW *window, const char *directory, ArraySlice files_slice, const char **files, size_t selected_entry) {
+void draw_directory_window(WINDOW *window, const char *directory, const char **files, size_t files_len, size_t selected_entry) {
     // Clear the window
     werase(window);
 
@@ -40,8 +39,8 @@ void draw_directory_window(WINDOW *window, const char *directory, ArraySlice fil
     mvwprintw(window, 1, 1, "Directory: %.*s", COLS - 4, directory);
 
     // Display files in the directory within the visible range
-    for (size_t i = 0; i < ArraySlice_LEN(files_slice); i++) {
-    	const char *current_name = ArraySlice_NTH(files_slice, files, i);
+    for (size_t i = 0; i < files_len; i++) {
+    	const char *current_name = files[i];
 	// Get the extension-related stuff separated
         const char *extension = strrchr(current_name, '.');
 
@@ -56,7 +55,7 @@ void draw_directory_window(WINDOW *window, const char *directory, ArraySlice fil
                 mvwprintw(window, i + 4, 2, "%.*s...", MAX_DISPLAY_LENGTH - 3, current_name);
             }
         } else {
-            if (files_slice.start + i == selected_entry) {
+            if (i == selected_entry) {
                 wattron(window, A_REVERSE);
                 mvwprintw(window, i + 4, 2, "%s", current_name);
                 wattroff(window, A_REVERSE);
@@ -208,6 +207,7 @@ void navigate_right(const char **current_directory, const char *selected_entry, 
 }
 
 
+
 // TODO: make it adapt itself when the screen gets resized
 int main() {
     WINDOW *mainwin;
@@ -350,15 +350,13 @@ int main() {
             }
         }
 
-	// Create a slice of the visible files
-	ArraySlice files_slice = {
-		start_entry_dir,
-		// end_entry_dir is added one because ArraySlices don't include
-		// their ends
-		MIN(end_entry_dir + 1, num_files),
-	};
         // Draw the directory window
-        draw_directory_window(dirwin, current_directory, files_slice, files, selected_entry_dir);
+        draw_directory_window(
+		dirwin, current_directory,
+		&files[start_entry_dir],
+		MIN(end_entry_dir + 1, num_files) - start_entry_dir,
+		selected_entry_dir - start_entry_dir
+	);
 
         // Draw the preview window
         draw_preview_window(previewwin, filename, content);
