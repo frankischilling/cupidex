@@ -7,8 +7,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <arrayslice.h>
+#include <utils.h>
+
 #define MAX_PATH_LENGTH 256
 #define MAX_DISPLAY_LENGTH 32
+
 
 bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
@@ -25,7 +29,7 @@ bool is_directory(const char *path, const char *filename) {
     return true;
 }
 
-void draw_directory_window(WINDOW *window, const char *directory, const char **files, int num_files, int selected_entry, int start_entry, int end_entry) {
+void draw_directory_window(WINDOW *window, const char *directory, ArraySlice files_slice, const char **files, size_t selected_entry) {
     // Clear the window
     werase(window);
 
@@ -36,8 +40,9 @@ void draw_directory_window(WINDOW *window, const char *directory, const char **f
     mvwprintw(window, 1, 1, "Directory: %.*s", COLS - 4, directory);
 
     // Display files in the directory within the visible range
-    for (int i = start_entry; i <= end_entry && i < num_files; ++i) {
-        const char *current_name = files[i];
+    for (size_t i = 0; i < ArraySlice_LEN(files_slice); i++) {
+    	const char *current_name = ArraySlice_NTH(files_slice, files, i);
+	// Get the extension-related stuff separated
         const char *extension = strrchr(current_name, '.');
 
         // Truncate file names that exceed the window width
@@ -46,18 +51,17 @@ void draw_directory_window(WINDOW *window, const char *directory, const char **f
 
         if (strlen(current_name) > MAX_DISPLAY_LENGTH) {
             if (extension && strlen(extension) <= MAX_DISPLAY_LENGTH - 4) {
-                mvwprintw(window, i - start_entry + 4, 2, "%.*s...%s", MAX_DISPLAY_LENGTH - 7, current_name, extension);
+                mvwprintw(window, i + 4, 2, "%.*s...%s", MAX_DISPLAY_LENGTH - 7, current_name, extension);
             } else {
-                mvwprintw(window, i - start_entry + 4, 2, "%.*s...", MAX_DISPLAY_LENGTH - 3, current_name);
+                mvwprintw(window, i + 4, 2, "%.*s...", MAX_DISPLAY_LENGTH - 3, current_name);
             }
         } else {
             if (i == selected_entry) {
-                // Highlight the selected entry
                 wattron(window, A_REVERSE);
-                mvwprintw(window, i - start_entry + 4, 2, "%s", current_name);
+                mvwprintw(window, i + 4, 2, "%s", current_name);
                 wattroff(window, A_REVERSE);
             } else {
-                mvwprintw(window, i - start_entry + 4, 2, "%s", current_name);
+                mvwprintw(window, i + 4, 2, "%s", current_name);
             }
 
             // Check if it's a directory
@@ -65,10 +69,10 @@ void draw_directory_window(WINDOW *window, const char *directory, const char **f
 
             if (is_dir) {
                 // Print an indicator for directories
-                mvwprintw(window, i - start_entry + 4, MAX_DISPLAY_LENGTH + 2, "[DIR]");
+                mvwprintw(window, i + 4, MAX_DISPLAY_LENGTH + 2, "[DIR]");
             } else if (extension) {
                 // Print the file extension
-                mvwprintw(window, i - start_entry + 4, MAX_DISPLAY_LENGTH + 2, "%s", extension);
+                mvwprintw(window, i + 4, MAX_DISPLAY_LENGTH + 2, "%s", extension);
             }
         }
     }
@@ -345,8 +349,15 @@ int main() {
             }
         }
 
+	// Create a slice of the visible files
+	ArraySlice files_slice = {
+		start_entry_dir,
+		// end_entry_dir is added one because ArraySlices don't include
+		// their ends
+		MIN(end_entry_dir + 1, num_files),
+	};
         // Draw the directory window
-        draw_directory_window(dirwin, current_directory, files, num_files, selected_entry_dir, start_entry_dir, end_entry_dir);
+        draw_directory_window(dirwin, current_directory, files_slice, files, selected_entry_dir);
 
         // Draw the preview window
         draw_preview_window(previewwin, filename, content);
