@@ -27,7 +27,6 @@ bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
 }
 
-
 void draw_directory_window(
     WINDOW *window,
     const char *directory,
@@ -43,6 +42,13 @@ void draw_directory_window(
 
     // Display the directory path
     mvwprintw(window, 1, 1, "Directory: %.*s", COLS - 4, directory);
+
+    // Additional logic to fix the displayed directory path
+    char corrected_directory[MAX_PATH_LENGTH];
+    if (directory[0] != '/') {
+        snprintf(corrected_directory, MAX_PATH_LENGTH, "/%s", directory);
+        mvwprintw(window, 1, 1, "Directory: %.*s", COLS - 4, corrected_directory);
+    }
 
     // Display files in the directory within the visible range
     for (SIZE i = 0; i < files_len; i++) {
@@ -110,6 +116,15 @@ void fix_cursor(CursorAndSlice *cas) {
     cas->start = MAX(cas->start, cas->cursor + 1 - cas->num_lines);
 }
 
+void path_join(char *result, const char *base, const char *extra) {
+    if (base[strlen(base) - 1] == '/' && extra[0] == '/') {
+        // Avoid double slash by skipping the first character of 'extra'
+        snprintf(result, MAX_PATH_LENGTH, "%s%s", base, extra + 1);
+    } else {
+        snprintf(result, MAX_PATH_LENGTH, "%s/%s", base, extra);
+    }
+}
+
 void reload_directory(Vector *files, const char *current_directory) {
     // Empties the vector
     Vector_set_len(files, 0);
@@ -128,22 +143,43 @@ void navigate_down(CursorAndSlice *cas) {
 }
 
 void navigate_left(char **current_directory, const char *parent_directory, Vector *files) {
+    // Check if the current directory is the root directory
     if (strcmp(*current_directory, parent_directory) != 0) {
-        free(*current_directory);
-        *current_directory = strdup(parent_directory);
+        // If not the root directory, move up one level
+        char *last_slash = strrchr(*current_directory, '/');
+        if (last_slash != NULL) {
+            *last_slash = '\0'; // Remove the last directory from the path
+            reload_directory(files, *current_directory);
+        }
+    }
+
+    // Check if the current directory is now an empty string
+    if ((*current_directory)[0] == '\0') {
+        // If empty, set it back to the root directory
+        strcpy(*current_directory, parent_directory);
         reload_directory(files, *current_directory);
     }
 }
 
-void navigate_right(char **current_directory, const char *selected_entry, Vector *files) {
-    // Check if the selected entry is a directory
-    if (is_directory(*current_directory, selected_entry)) {
-        char new_path[MAX_PATH_LENGTH];
-        snprintf(new_path, sizeof(new_path), "%s/%s", *current_directory, selected_entry);
+void navigate_right(char **current_directory, const char *selected_entry, Vector *files, CursorAndSlice *dir_window_cas) {
+    char new_path[MAX_PATH_LENGTH];
+    path_join(new_path, *current_directory, selected_entry);
 
+    // Save the current cursor position
+    SIZE saved_cursor = dir_window_cas->cursor;
+
+    // Check if the selected entry is a directory
+    struct stat entry_stat;
+    if (stat(new_path, &entry_stat) == 0 && S_ISDIR(entry_stat.st_mode)) {
         free(*current_directory);
         *current_directory = strdup(new_path);
         reload_directory(files, *current_directory);
+
+        // Restore the cursor position
+        dir_window_cas->cursor = saved_cursor;
+    } else {
+        // Display a message only if it's not a directory
+        mvprintw(LINES - 1, 1, "Selected entry is a file or not a valid directory");
     }
 }
 
@@ -266,9 +302,10 @@ int main() {
                 case KEY_RIGHT:
                     // Navigate right (go into the selected directory)
                     navigate_right(
-                        &current_directory,
-                        FileAttr_get_name(files.el[dir_window_cas.cursor]),
-                        &files
+                            &current_directory,
+                            FileAttr_get_name(files.el[dir_window_cas.cursor]),
+                            &files,
+                            &dir_window_cas
                     );
 
                     // Reload the file list for the new directory

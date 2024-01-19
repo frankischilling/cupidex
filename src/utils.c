@@ -15,6 +15,7 @@
 #define MAX_PATH_LENGTH 256
 #define MAX_DISPLAY_LENGTH 32
 
+
 void die(int r, const char *format, ...) {
 	fprintf(stderr, "The program used die()\n");
 	fprintf(stderr, "The last errno was %d/%s\n", errno, strerror(errno));
