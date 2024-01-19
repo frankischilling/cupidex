@@ -38,6 +38,10 @@ bool is_directory(const char *path, const char *filename) {
     return true;
 }
 
+// TODO: instead of using strdup for the filenames create a structure (maybe an
+//       opaque pointer since they already need to be dynamically allocated)
+//       that can store other attributes of struct dirent other than just the
+//       name.
 void append_files_to_vec(Vector *v, const char *name) {
     DIR *dir = opendir(name);
     if (dir != NULL) {
@@ -154,7 +158,9 @@ void navigate_left(char **current_directory, const char *parent_directory, Vecto
         free(*current_directory);
         *current_directory = strdup(parent_directory);
 
+        // Empties the vector
         Vector_set_len(files, 0);
+        // Reads the filenames
         append_files_to_vec(files, *current_directory);
     }
 }
@@ -288,14 +294,10 @@ int main() {
                     // ...
 
                     // Reset selected entries and scroll positions
-                    dir_window_cas.cursor    = 0;
-                    dir_window_cas.start     = 0;
-                    dir_window_cas.num_lines = LINES - 5;
-                    dir_window_cas.num_files = Vector_len(files);
-                    preview_window_cas.cursor    = 0;
-                    preview_window_cas.start     = 0;
-                    preview_window_cas.num_lines = LINES - 5;
-                    preview_window_cas.num_files = Vector_len(files);
+                    dir_window_cas.cursor    = preview_window_cas.cursor    = 0;
+                    dir_window_cas.start     = preview_window_cas.start     = 0;
+                    dir_window_cas.num_lines = preview_window_cas.num_lines = LINES - 5;
+                    dir_window_cas.num_files = preview_window_cas.num_files = Vector_len(files);
                     break;
                 case KEY_RIGHT:
                     // Navigate right (go into the selected directory)
@@ -309,14 +311,10 @@ int main() {
                     // ...
 
                     // FIXME: repeated code
-                    dir_window_cas.cursor    = 0;
-                    dir_window_cas.start     = 0;
-                    dir_window_cas.num_lines = LINES - 5;
-                    dir_window_cas.num_files = Vector_len(files);
-                    preview_window_cas.cursor    = 0;
-                    preview_window_cas.start     = 0;
-                    preview_window_cas.num_lines = LINES - 5;
-                    preview_window_cas.num_files = Vector_len(files);
+                    dir_window_cas.cursor    = preview_window_cas.cursor    = 0;
+                    dir_window_cas.start     = preview_window_cas.start     = 0;
+                    dir_window_cas.num_lines = preview_window_cas.num_lines = LINES - 5;
+                    dir_window_cas.num_files = preview_window_cas.num_files = Vector_len(files);
                     break;
                 default:
                     // Print the key code for debugging purposes
