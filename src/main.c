@@ -164,7 +164,7 @@ void navigate_left(const char **current_directory, const char *parent_directory,
             closedir(dir);
 
             // Allocate memory for file names
-            *files = (const char **)malloc(*num_files * sizeof(const char *));
+            *files = malloc(*num_files * sizeof(const char *));
             if (*files == NULL) {
                 // Handle memory allocation error
                 endwin();  // Clean up ncurses
@@ -210,7 +210,7 @@ void navigate_right(const char **current_directory, const char *selected_entry, 
             closedir(dir);
 
             // Allocate memory for file names
-            *files = (const char **)malloc(*num_files * sizeof(const char *));
+            *files = malloc(*num_files * sizeof(const char *));
             if (*files == NULL) {
                 // Handle memory allocation error
                 endwin();  // Clean up ncurses
@@ -243,10 +243,6 @@ int main() {
     keypad(stdscr, TRUE);
     curs_set(1);
 
-    SIZE start_entry_dir = 0;  // Index of the first visible entry in the directory window
-    SIZE end_entry_dir = LINES - 6;  // Index of the last visible entry in the directory window
-    SIZE start_entry_preview = 0;  // Index of the first visible entry in the preview window
-    SIZE end_entry_preview = LINES - 6;  // Index of the last visible entry in the preview window
 
     // Create main window
     mainwin = newwin(LINES, COLS, 0, 0);
@@ -292,7 +288,7 @@ int main() {
         closedir(dir);
 
         // Allocate memory for file names
-        files = (const char **)malloc(num_files * sizeof(const char *));
+        files = malloc(num_files * sizeof(const char *));
         if (files == NULL) {
             // Handle memory allocation error
             endwin();  // Clean up ncurses
@@ -316,8 +312,17 @@ int main() {
     const char *filename = "";  // You can set a default filename if needed
     const char *content = "This is a placeholder content.";  // You can set default content if needed
     SIZE selected_entry_dir = 0;
+    SIZE start_entry_dir = 0;  // Index of the first visible entry in the directory window
+    SIZE end_entry_dir = LINES - 6;  // Index of the last visible entry in the directory window
+
+    SIZE start_entry_preview = 0;  // Index of the first visible entry in the preview window
+    SIZE end_entry_preview = LINES - 6;  // Index of the last visible entry in the preview window
     SIZE selected_entry_preview = 0;
-    SIZE active_window = 1;  // 1: Directory window, 2: Preview window
+
+    enum {
+        DIRECTORY_WIN_ACTIVE = 1,
+        PREVIEW_WIN_ACTIVE = 2,
+    } active_window = DIRECTORY_WIN_ACTIVE;
 
     int ch;
     while ((ch = getch()) != KEY_F(1)) {
@@ -327,14 +332,14 @@ int main() {
             switch (ch) {
                 case KEY_UP:
                     // Move up in the active window
-                    if (active_window == 1)
+                    if (active_window == DIRECTORY_WIN_ACTIVE)
                         navigate_up(&selected_entry_dir, &start_entry_dir, &end_entry_dir);
                     else
                         navigate_up(&selected_entry_preview, &start_entry_preview, &end_entry_preview);
                     break;
                 case KEY_DOWN:
                     // Move down in the active window
-                    if (active_window == 1)
+                    if (active_window == DIRECTORY_WIN_ACTIVE)
                         navigate_down(&selected_entry_dir, num_files, &start_entry_dir, &end_entry_dir);
                     else
                         navigate_down(&selected_entry_preview, num_files, &start_entry_preview, &end_entry_preview);
@@ -378,11 +383,11 @@ int main() {
 
         // Draw the directory window
         draw_directory_window(
-		dirwin, current_directory,
-		&files[start_entry_dir],
-		MIN(end_entry_dir + 1, num_files) - start_entry_dir,
-		selected_entry_dir - start_entry_dir
-	);
+            dirwin, current_directory,
+            &files[start_entry_dir],
+            MIN(end_entry_dir + 1, num_files) - start_entry_dir,
+            selected_entry_dir - start_entry_dir
+        );
 
         // Draw the preview window
         draw_preview_window(previewwin, filename, content);
@@ -394,10 +399,6 @@ int main() {
     }
 
 
-    // Free allocated memory for file names
-    for (SIZE i = 0; i < num_files; ++i) {
-        free((void *)files[i]);
-    }
     free(files);
 
     // Clean up
