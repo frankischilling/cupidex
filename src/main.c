@@ -62,6 +62,9 @@ void draw_directory_window(
         [[maybe_unused]]
         SIZE max_display_length = COLS - 6;  // Adjusted to leave space for potential border
 
+        if (i == selected_entry)
+            wattron(window, A_REVERSE);
+
         if (strlen(current_name) > MAX_DISPLAY_LENGTH) {
             if (extension && strlen(extension) <= MAX_DISPLAY_LENGTH - 4) {
                 mvwprintw(window, i + 4, 2, "%.*s...%s", MAX_DISPLAY_LENGTH - 7, current_name, extension);
@@ -69,13 +72,7 @@ void draw_directory_window(
                 mvwprintw(window, i + 4, 2, "%.*s...", MAX_DISPLAY_LENGTH - 3, current_name);
             }
         } else {
-            if (i == selected_entry) {
-                wattron(window, A_REVERSE);
-                mvwprintw(window, i + 4, 2, "%s", current_name);
-                wattroff(window, A_REVERSE);
-            } else {
-                mvwprintw(window, i + 4, 2, "%s", current_name);
-            }
+            mvwprintw(window, i + 4, 2, "%s", current_name);
 
             // Check if it's a directory
             bool is_dir = is_directory(directory, current_name);
@@ -88,6 +85,9 @@ void draw_directory_window(
                 mvwprintw(window, i + 4, MAX_DISPLAY_LENGTH + 2, "%s", extension);
             }
         }
+
+        if (i == selected_entry)
+            wattroff(window, A_REVERSE);
     }
 
     // Refresh the window
