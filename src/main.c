@@ -229,6 +229,13 @@ int main() {
     keypad(stdscr, TRUE);
     curs_set(1);
 
+    // getch() or other read operations, instead of blocking until a key is
+    // pressed, block for at most 100 milliseconds. This is useful since it
+    // doesn't completely freeze the screen if no keys are typed.
+    // This behaviour is described by both X/Open Curses, Issue 4, Version 2
+    // and X/Open Curses, Issue 7.
+    timeout(100);
+
 
     // Create main window
     mainwin = newwin(LINES, COLS, 0, 0);
