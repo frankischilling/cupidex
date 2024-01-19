@@ -38,10 +38,27 @@ bool is_directory(const char *path, const char *filename) {
     return true;
 }
 
+void append_files_to_vec(Vector *v, const char *name) {
+    DIR *dir = opendir(name);
+    if (dir != NULL) {
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            // Filter out "." and ".." entries
+            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                Vector_add(v, 1);
+                v->el[Vector_len(*v)] = strdup(entry->d_name);
+                Vector_set_len(v, Vector_len(*v) + 1);
+            }
+        }
+        closedir(dir);
+    }
+}
+
+
 void draw_directory_window(
 	WINDOW *window,
 	const char *directory,
-	const char **files,
+	char **files,
 	SIZE files_len,
 	SIZE selected_entry
 ) {
@@ -175,50 +192,18 @@ void navigate_left(const char **current_directory, const char *parent_directory,
     }
 }
 
-void navigate_right(const char **current_directory, const char *selected_entry, const char ***files, SIZE *num_files) {
+void navigate_right(char **current_directory, const char *selected_entry, Vector *files) {
     // Check if the selected entry is a directory
     if (is_directory(*current_directory, selected_entry)) {
         // Change to the selected directory
         char new_path[MAX_PATH_LENGTH];
         snprintf(new_path, sizeof(new_path), "%s/%s", *current_directory, selected_entry);
 
-        free((void *)*files);
-        *files = NULL;
-        *num_files = 0;
+        free(*current_directory);
         *current_directory = strdup(new_path);
 
-        DIR *dir = opendir(*current_directory);
-        if (dir != NULL) {
-            struct dirent *entry;
-            while ((entry = readdir(dir)) != NULL) {
-                // Filter out "." and ".." entries
-                if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                    (*num_files)++;
-                }
-            }
-            closedir(dir);
-
-            // Allocate memory for file names
-            free(*files);
-            *files = malloc(*num_files * sizeof(const char *));
-            if (*files == NULL) {
-                // Handle memory allocation error
-                endwin();  // Clean up ncurses
-                exit(EXIT_FAILURE);
-            }
-
-            // Populate the array with file names
-            dir = opendir(*current_directory);
-            SIZE i = 0;
-            while ((entry = readdir(dir)) != NULL && i < *num_files) {
-                // Filter out "." and ".." entries
-                if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                    (*files)[i] = strdup(entry->d_name);
-                    i++;
-                }
-            }
-            closedir(dir);
-        }
+        Vector_set_len(files, 0);
+        append_files_to_vec(files, *current_directory);
     }
 }
 
@@ -262,28 +247,14 @@ int main() {
 
     // Get the default root directory ("/") or user's home directory
     const char *default_directory = getenv("HOME");
-    if (default_directory == NULL) {
+    if (default_directory == NULL)
         default_directory = "/";
-    }
 
-    // Initialize the current directory
-    const char *current_directory = default_directory;
+    char *current_directory = strdup(default_directory);
 
     Vector files = Vector_new(10);
+    append_files_to_vec(&files, current_directory);
 
-    DIR *dir = opendir(current_directory);
-    if (dir != NULL) {
-        struct dirent *entry;
-        while ((entry = readdir(dir)) != NULL) {
-            // Filter out "." and ".." entries
-            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                Vector_add(&files, 1);
-                files.el[Vector_len(files)] = strdup(entry->d_name);
-                Vector_set_len(&files, Vector_len(files) + 1);
-            }
-        }
-        closedir(dir);
-    }
 
     // Dummy filename and content for demonstration
     const char *filename = "";  // You can set a default filename if needed
@@ -360,13 +331,11 @@ int main() {
                     break;
                 case KEY_RIGHT:
                     // Navigate right (go into the selected directory)
-                    /*
                     navigate_right(
                         &current_directory,
-                        files[dir_window_cas.cursor], &files,
-                        &num_files
+                        files.el[dir_window_cas.cursor],
+                        &files
                     );
-                    */
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
                     // ...
@@ -391,7 +360,7 @@ int main() {
         // Draw the directory window
         draw_directory_window(
             dirwin, current_directory,
-            (const char **)&files.el[dir_window_cas.start],
+            (char **)&files.el[dir_window_cas.start],
             // TODO: make sure that its impossible for num_lines to get past
             //       num_files.
             MIN(dir_window_cas.num_lines, dir_window_cas.num_files - dir_window_cas.start),
@@ -409,6 +378,7 @@ int main() {
 
 
     Vector_bye(&files);
+    free(current_directory);
 
     // Clean up
     endwin();

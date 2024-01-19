@@ -34,6 +34,10 @@ void Vector_add(Vector *v, size_t add) {
 }
 
 void Vector_set_len(Vector *v, size_t len) {
+    if (len < v->IMPL.len)
+        for (size_t i = len; v->el[i]; i++)
+            free(v->el[i]);
+
     v->IMPL.len = len;
     v->el[len] = nullptr;
 }
