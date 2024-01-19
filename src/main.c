@@ -28,7 +28,13 @@ bool is_directory(const char *path, const char *filename) {
     return true;
 }
 
-void draw_directory_window(WINDOW *window, const char *directory, const char **files, size_t files_len, size_t selected_entry) {
+void draw_directory_window(
+	WINDOW *window,
+	const char *directory,
+	const char **files,
+	SIZE files_len,
+	SIZE selected_entry
+) {
     // Clear the window
     werase(window);
 
@@ -39,14 +45,14 @@ void draw_directory_window(WINDOW *window, const char *directory, const char **f
     mvwprintw(window, 1, 1, "Directory: %.*s", COLS - 4, directory);
 
     // Display files in the directory within the visible range
-    for (size_t i = 0; i < files_len; i++) {
+    for (SIZE i = 0; i < files_len; i++) {
     	const char *current_name = files[i];
 	// Get the extension-related stuff separated
         const char *extension = strrchr(current_name, '.');
 
         // Truncate file names that exceed the window width
 	[[maybe_unused]]
-        int max_display_length = COLS - 6;  // Adjusted to leave space for potential border
+        SIZE max_display_length = COLS - 6;  // Adjusted to leave space for potential border
 
         if (strlen(current_name) > MAX_DISPLAY_LENGTH) {
             if (extension && strlen(extension) <= MAX_DISPLAY_LENGTH - 4) {
@@ -64,7 +70,7 @@ void draw_directory_window(WINDOW *window, const char *directory, const char **f
             }
 
             // Check if it's a directory
-            int is_dir = is_directory(directory, current_name);
+            bool is_dir = is_directory(directory, current_name);
 
             if (is_dir) {
                 // Print an indicator for directories
@@ -97,7 +103,7 @@ void draw_preview_window(WINDOW *window, const char *filename, const char *conte
     wrefresh(window);
 }
 
-void navigate_up(int* selected_entry, int* start_entry, int* end_entry) {
+void navigate_up(SIZE* selected_entry, SIZE* start_entry, SIZE* end_entry) {
     if (*selected_entry > 0) {
         (*selected_entry)--;
         while (*selected_entry < *start_entry) {
@@ -107,7 +113,7 @@ void navigate_up(int* selected_entry, int* start_entry, int* end_entry) {
     }
 }
 
-void navigate_down(int* selected_entry, int num_files, int* start_entry, int* end_entry) {
+void navigate_down(SIZE* selected_entry, SIZE num_files, SIZE* start_entry, SIZE* end_entry) {
     // num_files - 1 could cause an overflow if an unsigned type was being used
     if (*selected_entry + 1 < num_files) {
         (*selected_entry)++;
@@ -118,7 +124,7 @@ void navigate_down(int* selected_entry, int num_files, int* start_entry, int* en
     }
 }
 
-void navigate_left(const char **current_directory, const char *parent_directory, const char ***files, int *num_files) {
+void navigate_left(const char **current_directory, const char *parent_directory, const char ***files, SIZE *num_files) {
     if (strcmp(*current_directory, parent_directory) != 0) {
         // Change to the parent directory
         free((void *)*files);
@@ -147,7 +153,7 @@ void navigate_left(const char **current_directory, const char *parent_directory,
 
             // Populate the array with file names
             dir = opendir(*current_directory);
-            int i = 0;
+            SIZE i = 0;
             while ((entry = readdir(dir)) != NULL && i < *num_files) {
                 // Filter out "." and ".." entries
                 if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
@@ -160,7 +166,7 @@ void navigate_left(const char **current_directory, const char *parent_directory,
     }
 }
 
-void navigate_right(const char **current_directory, const char *selected_entry, const char ***files, int *num_files) {
+void navigate_right(const char **current_directory, const char *selected_entry, const char ***files, SIZE *num_files) {
     // Check if the selected entry is a directory
     if (is_directory(*current_directory, selected_entry)) {
         // Change to the selected directory
@@ -193,7 +199,7 @@ void navigate_right(const char **current_directory, const char *selected_entry, 
 
             // Populate the array with file names
             dir = opendir(*current_directory);
-            int i = 0;
+            SIZE i = 0;
             while ((entry = readdir(dir)) != NULL && i < *num_files) {
                 // Filter out "." and ".." entries
                 if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
@@ -217,10 +223,10 @@ int main() {
     keypad(stdscr, TRUE);
     curs_set(1);
 
-    int start_entry_dir = 0;  // Index of the first visible entry in the directory window
-    int end_entry_dir = LINES - 6;  // Index of the last visible entry in the directory window
-    int start_entry_preview = 0;  // Index of the first visible entry in the preview window
-    int end_entry_preview = LINES - 6;  // Index of the last visible entry in the preview window
+    SIZE start_entry_dir = 0;  // Index of the first visible entry in the directory window
+    SIZE end_entry_dir = LINES - 6;  // Index of the last visible entry in the directory window
+    SIZE start_entry_preview = 0;  // Index of the first visible entry in the preview window
+    SIZE end_entry_preview = LINES - 6;  // Index of the last visible entry in the preview window
 
     // Create main window
     mainwin = newwin(LINES, COLS, 0, 0);
@@ -228,8 +234,8 @@ int main() {
     wtimeout(mainwin, 100);  // Adjust the timeout value as needed
 
     // Calculate dimensions for the directory and preview windows
-    int dir_win_width = COLS / 2;
-    int preview_win_width = COLS - dir_win_width;
+    SIZE dir_win_width = COLS / 2;
+    SIZE preview_win_width = COLS - dir_win_width;
 
     // Create directory window
     WINDOW *dirwin = subwin(mainwin, LINES, dir_win_width, 0, 0);
@@ -252,7 +258,7 @@ int main() {
 
     // Initialize the list of files dynamically
     const char **files = NULL;
-    int num_files = 0;
+    SIZE num_files = 0;
 
     DIR *dir = opendir(current_directory);
     if (dir != NULL) {
@@ -275,7 +281,7 @@ int main() {
 
         // Populate the array with file names
         dir = opendir(current_directory);
-        int i = 0;
+        SIZE i = 0;
         while ((entry = readdir(dir)) != NULL && i < num_files) {
             // Filter out "." and ".." entries
             if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
@@ -289,9 +295,9 @@ int main() {
     // Dummy filename and content for demonstration
     const char *filename = "";  // You can set a default filename if needed
     const char *content = "This is a placeholder content.";  // You can set default content if needed
-    int selected_entry_dir = 0;
-    int selected_entry_preview = 0;
-    int active_window = 1;  // 1: Directory window, 2: Preview window
+    SIZE selected_entry_dir = 0;
+    SIZE selected_entry_preview = 0;
+    SIZE active_window = 1;  // 1: Directory window, 2: Preview window
 
     int ch;
     while ((ch = getch()) != KEY_F(1)) {
@@ -369,7 +375,7 @@ int main() {
 
 
     // Free allocated memory for file names
-    for (int i = 0; i < num_files; ++i) {
+    for (SIZE i = 0; i < num_files; ++i) {
         free((void *)files[i]);
     }
     free(files);

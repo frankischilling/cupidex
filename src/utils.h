@@ -1,3 +1,6 @@
+// Must be signed
+#define SIZE int
+
 #define EDITOR_COMMAND "nano"  // Change this to your preferred default text editor
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
