@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 
 #include <utils.h>
+#include <vector.h>
 
 #define MAX_PATH_LENGTH 256
 #define MAX_DISPLAY_LENGTH 32
@@ -19,6 +20,7 @@ typedef struct {
     SIZE num_lines;
     SIZE num_files;
 } CursorAndSlice;
+
 
 
 bool is_hidden(const char *filename) {
@@ -150,6 +152,7 @@ void navigate_left(const char **current_directory, const char *parent_directory,
             closedir(dir);
 
             // Allocate memory for file names
+            free(*files);
             *files = malloc(*num_files * sizeof(const char *));
             if (*files == NULL) {
                 // Handle memory allocation error
@@ -196,6 +199,7 @@ void navigate_right(const char **current_directory, const char *selected_entry, 
             closedir(dir);
 
             // Allocate memory for file names
+            free(*files);
             *files = malloc(*num_files * sizeof(const char *));
             if (*files == NULL) {
                 // Handle memory allocation error
@@ -265,9 +269,7 @@ int main() {
     // Initialize the current directory
     const char *current_directory = default_directory;
 
-    // Initialize the list of files dynamically
-    const char **files = NULL;
-    SIZE num_files = 0;
+    Vector files = Vector_new(10);
 
     DIR *dir = opendir(current_directory);
     if (dir != NULL) {
@@ -275,27 +277,9 @@ int main() {
         while ((entry = readdir(dir)) != NULL) {
             // Filter out "." and ".." entries
             if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                num_files++;
-            }
-        }
-        closedir(dir);
-
-        // Allocate memory for file names
-        files = malloc(num_files * sizeof(const char *));
-        if (files == NULL) {
-            // Handle memory allocation error
-            endwin();  // Clean up ncurses
-            exit(EXIT_FAILURE);
-        }
-
-        // Populate the array with file names
-        dir = opendir(current_directory);
-        SIZE i = 0;
-        while ((entry = readdir(dir)) != NULL && i < num_files) {
-            // Filter out "." and ".." entries
-            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                files[i] = strdup(entry->d_name);
-                i++;
+                Vector_add(&files, 1);
+                files.el[Vector_len(files)] = strdup(entry->d_name);
+                Vector_set_len(&files, Vector_len(files) + 1);
             }
         }
         closedir(dir);
@@ -315,7 +299,7 @@ int main() {
         // last valid entry. Therefore the length is LINES - 6 + 1 - start
         .num_lines = LINES - 5,
         // Used for cursor validation
-        .num_files = num_files,
+        .num_files = Vector_len(files),
     };
 
     CursorAndSlice preview_window_cas = {
@@ -328,7 +312,7 @@ int main() {
         .num_lines = LINES - 5,
         // FIXME: I don't think it should be validated by the number of files
         //        since it isn't the dir window
-        .num_files = num_files,
+        .num_files = Vector_len(files),
     };
 
     enum {
@@ -340,6 +324,7 @@ int main() {
     while ((ch = getch()) != KEY_F(1)) {
         // Handle key presses and update screen
 
+        // ERR is returned if nothing has been pressed for 100ms
         if (ch != ERR) {
             switch (ch) {
                 case KEY_UP:
@@ -358,7 +343,7 @@ int main() {
                     break;
                 case KEY_LEFT:
                     // Navigate left (go up in the directory tree)
-                    navigate_left(&current_directory, "/", &files, &num_files);
+                    //navigate_left(&current_directory, "/", &files, &num_files);
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
                     // ...
@@ -367,19 +352,21 @@ int main() {
                     dir_window_cas.cursor    = 0;
                     dir_window_cas.start     = 0;
                     dir_window_cas.num_lines = LINES - 5;
-                    dir_window_cas.num_files = num_files;
+                    dir_window_cas.num_files = Vector_len(files);
                     preview_window_cas.cursor    = 0;
                     preview_window_cas.start     = 0;
                     preview_window_cas.num_lines = LINES - 5;
-                    preview_window_cas.num_files = num_files;
+                    preview_window_cas.num_files = Vector_len(files);
                     break;
                 case KEY_RIGHT:
                     // Navigate right (go into the selected directory)
+                    /*
                     navigate_right(
                         &current_directory,
                         files[dir_window_cas.cursor], &files,
                         &num_files
                     );
+                    */
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
                     // ...
@@ -388,11 +375,11 @@ int main() {
                     dir_window_cas.cursor    = 0;
                     dir_window_cas.start     = 0;
                     dir_window_cas.num_lines = LINES - 5;
-                    dir_window_cas.num_files = num_files;
+                    dir_window_cas.num_files = Vector_len(files);
                     preview_window_cas.cursor    = 0;
                     preview_window_cas.start     = 0;
                     preview_window_cas.num_lines = LINES - 5;
-                    preview_window_cas.num_files = num_files;
+                    preview_window_cas.num_files = Vector_len(files);
                     break;
                 default:
                     // Print the key code for debugging purposes
@@ -404,10 +391,10 @@ int main() {
         // Draw the directory window
         draw_directory_window(
             dirwin, current_directory,
-            &files[dir_window_cas.start],
+            (const char **)&files.el[dir_window_cas.start],
             // TODO: make sure that its impossible for num_lines to get past
             //       num_files.
-            MIN(dir_window_cas.num_lines, num_files - dir_window_cas.start),
+            MIN(dir_window_cas.num_lines, dir_window_cas.num_files - dir_window_cas.start),
             dir_window_cas.cursor - dir_window_cas.start
         );
 
@@ -421,7 +408,7 @@ int main() {
     }
 
 
-    free(files);
+    Vector_bye(&files);
 
     // Clean up
     endwin();
