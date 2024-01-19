@@ -9,6 +9,7 @@
 
 #include <utils.h>
 #include <vector.h>
+#include <files.h>
 
 #define MAX_PATH_LENGTH 256
 #define MAX_DISPLAY_LENGTH 32
@@ -21,11 +22,6 @@ typedef struct {
     SIZE num_files;
 } CursorAndSlice;
 
-typedef struct {
-    char* filename;
-    bool is_directory;
-    ino_t inode;
-} FileAttributes;
 
 bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
@@ -42,38 +38,14 @@ bool is_directory(const char *path, const char *filename) {
     return true;
 }
 
-// TODO: instead of using strdup for the filenames create a structure (maybe an
-//       opaque pointer since they already need to be dynamically allocated)
-//       that can store other attributes of struct dirent other than just the
-//       name.
-void append_files_to_vec(Vector *v, const char *name) {
-    DIR *dir = opendir(name);
-    if (dir != NULL) {
-        struct dirent *entry;
-        while ((entry = readdir(dir)) != NULL) {
-            // Filter out "." and ".." entries
-            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                Vector_add(v, 1);
-                FileAttributes* fileAttr = malloc(sizeof(FileAttributes));
-                fileAttr->filename = strdup(entry->d_name);
-                fileAttr->inode = entry->d_ino;
-                // populate other attributes as needed
-                v->el[Vector_len(*v)] = fileAttr;
-                Vector_set_len(v, Vector_len(*v) + 1);
-            }
-        }
-        closedir(dir);
-    }
-}
 
 
 void draw_directory_window(
     WINDOW *window,
     const char *directory,
-    Vector *files,
+    FileAttr *files,
     SIZE files_len,
-    SIZE selected_entry,
-    CursorAndSlice dir_window_cas
+    SIZE selected_entry
 ) {
     // Clear the window
     werase(window);
@@ -86,7 +58,7 @@ void draw_directory_window(
 
     // Display files in the directory within the visible range
     for (SIZE i = 0; i < files_len; i++) {
-        const char *current_name = ((FileAttributes *)files->el[dir_window_cas.start + i])->filename;
+        const char *current_name = FileAttr_get_name(files[i]);
         // Get the extension-related stuff separated
         const char *extension = strrchr(current_name, '.');
 
@@ -307,7 +279,11 @@ int main() {
                     break;
                 case KEY_RIGHT:
                     // Navigate right (go into the selected directory)
-                    navigate_right(&current_directory, ((FileAttributes *)files.el[dir_window_cas.cursor])->filename, &files);
+                    navigate_right(
+                        &current_directory,
+                        FileAttr_get_name(files.el[dir_window_cas.cursor]),
+                        &files
+                    );
 
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
@@ -329,12 +305,11 @@ int main() {
         // Draw the directory window
         draw_directory_window(
             dirwin, current_directory,
-            &files,
+            (FileAttr *)&files.el[dir_window_cas.start],
             // TODO: make sure that its impossible for num_lines to get past
             //       num_files.
             MIN(dir_window_cas.num_lines, dir_window_cas.num_files - dir_window_cas.start),
-            dir_window_cas.cursor - dir_window_cas.start,
-            dir_window_cas
+            dir_window_cas.cursor - dir_window_cas.start
         );
 
         // Draw the preview window

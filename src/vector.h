@@ -1,3 +1,8 @@
+#ifndef VECTOR_H
+#define VECTOR_H
+
+#include <stddef.h>
+
 struct VectorImpl {
     size_t cap;
     size_t len;
@@ -14,4 +19,7 @@ void Vector_bye(Vector *v);
 void Vector_add(Vector *v, size_t add);
 void Vector_set_len(Vector *v, size_t len);
 size_t Vector_len(Vector v);
+
+
+#endif
 
