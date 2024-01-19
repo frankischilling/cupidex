@@ -149,46 +149,13 @@ void navigate_down(CursorAndSlice *cas) {
     fix_cursor(cas);
 }
 
-void navigate_left(const char **current_directory, const char *parent_directory, const char ***files, SIZE *num_files) {
+void navigate_left(char **current_directory, const char *parent_directory, Vector *files) {
     if (strcmp(*current_directory, parent_directory) != 0) {
-        // Change to the parent directory
-        free((void *)*files);
-        *files = NULL;
-        *num_files = 0;
-        *current_directory = parent_directory;
+        free(*current_directory);
+        *current_directory = strdup(parent_directory);
 
-        DIR *dir = opendir(*current_directory);
-        if (dir != NULL) {
-            struct dirent *entry;
-            while ((entry = readdir(dir)) != NULL) {
-                // Filter out "." and ".." entries
-                if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                    (*num_files)++;
-                }
-            }
-            closedir(dir);
-
-            // Allocate memory for file names
-            free(*files);
-            *files = malloc(*num_files * sizeof(const char *));
-            if (*files == NULL) {
-                // Handle memory allocation error
-                endwin();  // Clean up ncurses
-                exit(EXIT_FAILURE);
-            }
-
-            // Populate the array with file names
-            dir = opendir(*current_directory);
-            SIZE i = 0;
-            while ((entry = readdir(dir)) != NULL && i < *num_files) {
-                // Filter out "." and ".." entries
-                if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-                    (*files)[i] = strdup(entry->d_name);
-                    i++;
-                }
-            }
-            closedir(dir);
-        }
+        Vector_set_len(files, 0);
+        append_files_to_vec(files, *current_directory);
     }
 }
 
@@ -197,6 +164,7 @@ void navigate_right(char **current_directory, const char *selected_entry, Vector
     if (is_directory(*current_directory, selected_entry)) {
         // Change to the selected directory
         char new_path[MAX_PATH_LENGTH];
+        // TODO: verify on docs if snprintf always writes the null byte
         snprintf(new_path, sizeof(new_path), "%s/%s", *current_directory, selected_entry);
 
         free(*current_directory);
@@ -314,7 +282,7 @@ int main() {
                     break;
                 case KEY_LEFT:
                     // Navigate left (go up in the directory tree)
-                    //navigate_left(&current_directory, "/", &files, &num_files);
+                    navigate_left(&current_directory, "/", &files);
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
                     // ...
