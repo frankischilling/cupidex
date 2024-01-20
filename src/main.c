@@ -10,6 +10,7 @@
 #include <utils.h>
 #include <vector.h>
 #include <files.h>
+#include <vecstack.h>
 
 #define MAX_PATH_LENGTH 256
 

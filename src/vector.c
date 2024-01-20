@@ -33,13 +33,17 @@ void Vector_add(Vector *v, size_t add) {
     }
 }
 
+void Vector_set_len_no_free(Vector *v, size_t len) {
+    v->IMPL.len = len;
+    v->el[len] = nullptr;
+}
+
 void Vector_set_len(Vector *v, size_t len) {
     if (len < v->IMPL.len)
         for (size_t i = len; v->el[i]; i++)
             free(v->el[i]);
 
-    v->IMPL.len = len;
-    v->el[len] = nullptr;
+    Vector_set_len_no_free(v, len);
 }
 
 size_t Vector_len(Vector v) {
