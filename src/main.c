@@ -12,7 +12,6 @@
 #include <files.h>
 
 #define MAX_PATH_LENGTH 256
-#define MAX_DISPLAY_LENGTH 32
 
 
 typedef struct {
@@ -34,53 +33,62 @@ void draw_directory_window(
     SIZE files_len,
     SIZE selected_entry
 ) {
+    [[maybe_unused]]
+    int cols, lines;
+    // No & are needed since this is a macro. Source: X/Open Curses, Issue 4,
+    // Version 2. COLS and LINES seem to refer to the terminal size, not the
+    // window's.
+    getmaxyx(window, lines, cols);
+
     werase(window);
     // Draw a border around the window
     box(window, 0, 0);
     // Display the directory path
-    mvwprintw(window, 1, 1, "Directory: %.*s", COLS - 4, directory);
+    mvwprintw(window, 1, 1, "Directory: %.*s", cols - 4, directory);
 
     // Additional logic to fix the displayed directory path
     char corrected_directory[MAX_PATH_LENGTH];
     if (directory[0] != '/') {
         snprintf(corrected_directory, MAX_PATH_LENGTH, "/%s", directory);
-        mvwprintw(window, 1, 1, "Directory: %.*s", COLS - 4, corrected_directory);
+        mvwprintw(window, 1, 1, "Directory: %.*s", cols - 4, corrected_directory);
     }
 
     // Display files in the directory within the visible range
     for (SIZE i = 0; i < files_len; i++) {
         const char *current_name = FileAttr_get_name(files[i]);
-        // Get the extension-related stuff separated
         const char *extension = strrchr(current_name, '.');
+        int extension_len = extension ? strlen(extension) : 0;
 
         // Truncate file names that exceed the window width
-        [[maybe_unused]]
-        SIZE max_display_length = COLS - 6;  // Adjusted to leave space for potential border
+        int max_display_length = cols - 4;
 
         if (i == selected_entry)
             wattron(window, A_REVERSE);
+        if (FileAttr_is_dir(files[i]))
+            wattron(window, A_BOLD);
 
-        if (strlen(current_name) > MAX_DISPLAY_LENGTH) {
-            if (extension && strlen(extension) <= MAX_DISPLAY_LENGTH - 4) {
-                mvwprintw(window, i + 4, 2, "%.*s...%s", MAX_DISPLAY_LENGTH - 7, current_name, extension);
-            } else {
-                mvwprintw(window, i + 4, 2, "%.*s...", MAX_DISPLAY_LENGTH - 3, current_name);
-            }
+        if ((int)strlen(current_name) > max_display_length) {
+            if (extension_len && extension_len + 5 < max_display_length)
+                mvwprintw(
+                    window, i + 4, 2,
+                    "%.*s... %s",
+                    max_display_length - 4 - extension_len, current_name,
+                    extension
+                );
+            else
+                mvwprintw(
+                    window, i + 4, 2,
+                    "%.*s...",
+                    max_display_length - 3, current_name
+                );
         } else {
             mvwprintw(window, i + 4, 2, "%s", current_name);
-
-
-            if (FileAttr_is_dir(files[i])) {
-                // Print an indicator for directories
-                mvwprintw(window, i + 4, MAX_DISPLAY_LENGTH + 2, "[DIR]");
-            } else if (extension) {
-                // Print the file extension
-                mvwprintw(window, i + 4, MAX_DISPLAY_LENGTH + 2, "%s", extension);
-            }
         }
 
         if (i == selected_entry)
             wattroff(window, A_REVERSE);
+        if (FileAttr_is_dir(files[i]))
+            wattroff(window, A_BOLD);
     }
 
     // Refresh the window
