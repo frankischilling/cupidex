@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <ncurses.h>
+#include <curses.h>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -34,12 +34,9 @@ void draw_directory_window(
     SIZE files_len,
     SIZE selected_entry
 ) {
-    // Clear the window
     werase(window);
-
     // Draw a border around the window
     box(window, 0, 0);
-
     // Display the directory path
     mvwprintw(window, 1, 1, "Directory: %.*s", COLS - 4, directory);
 
@@ -190,7 +187,9 @@ int main() {
     noecho();
     cbreak();
     keypad(stdscr, TRUE);
-    curs_set(1);
+    // Hides the cursor
+    // X/Open Curses, Issue 4, Version 2
+    curs_set(0);
 
     // getch() or other read operations, instead of blocking until a key is
     // pressed, block for at most 100 milliseconds. This is useful since it
@@ -337,8 +336,6 @@ int main() {
 
         // Draw the preview window
         draw_preview_window(previewwin, filename, content);
-
-        mvprintw(1, 1, "%d %d %d %d", dir_window_cas.cursor, dir_window_cas.num_files, dir_window_cas.start, dir_window_cas.num_lines);
 
         // Refresh the main window
         wrefresh(mainwin);
