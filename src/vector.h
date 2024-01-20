@@ -19,6 +19,8 @@ void Vector_bye(Vector *v);
 void Vector_add(Vector *v, size_t add);
 void Vector_set_len(Vector *v, size_t len);
 size_t Vector_len(Vector v);
+void Vector_min_cap(Vector *v);
+void Vector_sane_cap(Vector *v);
 
 
 #endif

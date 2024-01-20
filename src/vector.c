@@ -46,3 +46,13 @@ size_t Vector_len(Vector v) {
     return v.IMPL.len;
 }
 
+void Vector_min_cap(Vector *v) {
+    v->IMPL.cap = v->IMPL.len;
+    v->el = realloc(v->el, (v->IMPL.cap + 1) * sizeof(void *));
+}
+
+void Vector_sane_cap(Vector *v) {
+    v->IMPL.cap = v->IMPL.len * 2;
+    v->el = realloc(v->el, (v->IMPL.cap + 1) * sizeof(void *));
+}
+

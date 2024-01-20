@@ -135,6 +135,8 @@ void reload_directory(Vector *files, const char *current_directory) {
     Vector_set_len(files, 0);
     // Reads the filenames
     append_files_to_vec(files, current_directory);
+    // Makes the vector shorter
+    Vector_sane_cap(files);
 }
 
 void navigate_up(CursorAndSlice *cas) {
