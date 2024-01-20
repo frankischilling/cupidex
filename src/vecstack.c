@@ -18,7 +18,7 @@ void *VecStack_pop(VecStack *v) {
     return r;
 }
 
-void *VecStack_top(VecStack *v) {
+void *VecStack_peek(VecStack *v) {
     if (Vector_len(v->v) < 1)
         return nullptr;
     return v->v.el[Vector_len(v->v) - 1];
