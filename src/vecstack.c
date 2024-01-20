@@ -17,6 +17,13 @@ void *VecStack_pop(VecStack *v) {
     Vector_set_len_no_free(&v->v, Vector_len(v->v) - 1);
     return r;
 }
+
+void *VecStack_top(VecStack *v) {
+    if (Vector_len(v->v) < 1)
+        return nullptr;
+    return v->v.el[Vector_len(v->v) - 1];
+}
+
 void VecStack_bye(VecStack *v) {
     Vector_bye(&v->v);
 }

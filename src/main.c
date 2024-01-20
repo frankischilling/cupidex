@@ -14,6 +14,7 @@
 
 #define MAX_PATH_LENGTH 256
 
+VecStack directoryStack;
 
 typedef struct {
     SIZE start;
@@ -22,6 +23,18 @@ typedef struct {
     SIZE num_files;
 } CursorAndSlice;
 
+// Function to update the stack when navigating left or right
+void updateDirectoryStack(const char *newDirectory) {
+    char *token, *saveptr;
+    char *copy = strdup(newDirectory);
+
+    // Push each directory onto the stack
+    for (token = strtok_r(copy, "/", &saveptr); token; token = strtok_r(NULL, "/", &saveptr)) {
+        VecStack_push(&directoryStack, strdup(token));
+    }
+
+    free(copy);
+}
 
 bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
@@ -150,9 +163,9 @@ void navigate_down(CursorAndSlice *cas) {
     fix_cursor(cas);
 }
 
-void navigate_left(char **current_directory, const char *parent_directory, Vector *files) {
+void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_window_cas) {
     // Check if the current directory is the root directory
-    if (strcmp(*current_directory, parent_directory) != 0) {
+    if (strcmp(*current_directory, "/") != 0) {
         // If not the root directory, move up one level
         char *last_slash = strrchr(*current_directory, '/');
         if (last_slash != NULL) {
@@ -164,11 +177,21 @@ void navigate_left(char **current_directory, const char *parent_directory, Vecto
     // Check if the current directory is now an empty string
     if ((*current_directory)[0] == '\0') {
         // If empty, set it back to the root directory
-        strcpy(*current_directory, parent_directory);
+        strcpy(*current_directory, "/");
         reload_directory(files, *current_directory);
     }
+
+    // Pop the last directory from the stack
+    free(VecStack_pop(&directoryStack));
+
+    // Reset selected entries and scroll positions
+    dir_window_cas->cursor = 0;
+    dir_window_cas->start = 0;
+    dir_window_cas->num_lines = LINES - 5;
+    dir_window_cas->num_files = Vector_len(*files);
 }
 
+// Function to navigate right
 void navigate_right(char **current_directory, const char *selected_entry, Vector *files, CursorAndSlice *dir_window_cas) {
     char new_path[MAX_PATH_LENGTH];
     path_join(new_path, *current_directory, selected_entry);
@@ -182,6 +205,9 @@ void navigate_right(char **current_directory, const char *selected_entry, Vector
         free(*current_directory);
         *current_directory = strdup(new_path);
         reload_directory(files, *current_directory);
+
+        // Push the selected entry onto the stack
+        VecStack_push(&directoryStack, strdup(selected_entry));
 
         // Restore the cursor position
         dir_window_cas->cursor = saved_cursor;
@@ -228,6 +254,8 @@ int main() {
     WINDOW *previewwin = subwin(mainwin, LINES, preview_win_width, 0, dir_win_width);
     box(previewwin, 0, 0);
     wrefresh(previewwin);
+
+    directoryStack = VecStack_empty();  // Initialize the directory stack
 
     // Get the default root directory ("/") or user's home directory
     const char *default_directory = getenv("HOME");
@@ -298,7 +326,7 @@ int main() {
                     break;
                 case KEY_LEFT:
                     // Navigate left (go up in the directory tree)
-                    navigate_left(&current_directory, "/", &files);
+                    navigate_left(&current_directory, &files, &dir_window_cas);
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
                     // ...

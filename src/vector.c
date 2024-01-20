@@ -25,7 +25,6 @@ void Vector_bye(Vector *v) {
     free(v->el);
 }
 
-
 void Vector_add(Vector *v, size_t add) {
     if (v->IMPL.len + add > v->IMPL.cap) {
         v->IMPL.cap = MAX(v->IMPL.cap * 2, v->IMPL.len + add);
@@ -59,4 +58,3 @@ void Vector_sane_cap(Vector *v) {
     v->IMPL.cap = v->IMPL.len * 2;
     v->el = realloc(v->el, (v->IMPL.cap + 1) * sizeof(void *));
 }
-
