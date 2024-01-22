@@ -136,12 +136,27 @@ void fix_cursor(CursorAndSlice *cas) {
 }
 
 void path_join(char *result, const char *base, const char *extra) {
-    if (base[strlen(base) - 1] == '/' && extra[0] == '/') {
-        // Avoid double slash by skipping the first character of 'extra'
-        snprintf(result, MAX_PATH_LENGTH, "%s%s", base, extra + 1);
+    size_t base_len = strlen(base);
+    size_t extra_len = strlen(extra);
+
+    if (base_len == 0) {
+        // If the base is an empty string, copy the extra to the result
+        strncpy(result, extra, MAX_PATH_LENGTH);
+    } else if (extra_len == 0) {
+        // If the extra is an empty string, copy the base to the result
+        strncpy(result, base, MAX_PATH_LENGTH);
     } else {
-        snprintf(result, MAX_PATH_LENGTH, "%s/%s", base, extra);
+        // Check if the base ends with a slash
+        if (base[base_len - 1] == '/') {
+            // No need to skip the first character of 'extra'
+            snprintf(result, MAX_PATH_LENGTH, "%s%s", base, extra);
+        } else {
+            snprintf(result, MAX_PATH_LENGTH, "%s/%s", base, extra);
+        }
     }
+
+    // Ensure null-terminated
+    result[MAX_PATH_LENGTH - 1] = '\0';
 }
 
 void reload_directory(Vector *files, const char *current_directory) {
@@ -196,60 +211,40 @@ void navigate_right(char **current_directory, const char *selected_entry, Vector
     char new_path[MAX_PATH_LENGTH];
     path_join(new_path, *current_directory, selected_entry);
 
-    // Check for Memory Allocation Failures
-    char *new_directory = strdup(new_path);
-    if (new_directory == NULL) {
-        // Display an error message for memory allocation failure
-        mvprintw(LINES - 1, 1, "Memory allocation error");
-        refresh();
-        return;
-    }
-
-    // Save the current cursor position
-    SIZE saved_cursor = dir_window_cas->cursor;
-
     // Check if the selected entry is a directory
     struct stat entry_stat;
     if (stat(new_path, &entry_stat) == 0 && S_ISDIR(entry_stat.st_mode)) {
-        // Backup the current directory to handle potential memory issues
-        char *backup_directory = strdup(*current_directory);
+        // Save the current cursor position
+        SIZE saved_cursor = dir_window_cas->cursor;
 
-        // Attempt to update the current directory and reload files
+        // Push the selected entry onto the stack
+        VecStack_push(&directoryStack, strdup(selected_entry));
+
+        // Update the current directory and reload files
         free(*current_directory);
-        *current_directory = new_directory;
+        *current_directory = strdup(new_path);
         reload_directory(files, *current_directory);
 
         // Check for Memory Allocation Failures after reloading
         if (*current_directory == NULL) {
-            // Rollback to the original directory in case of memory issues
-            *current_directory = strdup(backup_directory);
+            // Restore the cursor position in case of memory issues
+            dir_window_cas->cursor = saved_cursor;
 
             // Display an error message
             mvprintw(LINES - 1, 1, "Memory allocation error");
             refresh();
 
             // Handle other cleanup or error recovery as needed
-            free(backup_directory);
-            free(new_directory);
             return;
         }
 
-        // Push the selected entry onto the stack
-        VecStack_push(&directoryStack, strdup(selected_entry));
-
         // Restore the cursor position
         dir_window_cas->cursor = saved_cursor;
-
-        // Free the backup directory
-        free(backup_directory);
     } else {
         // Display a message only if it's not a directory
         mvprintw(LINES - 1, 1, "Selected entry is a file or not a valid directory");
         // Refresh the screen to display the error message
         refresh();
-
-        // Free the memory allocated for new_directory
-        free(new_directory);
     }
 }
 
