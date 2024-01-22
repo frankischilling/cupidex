@@ -5,5 +5,5 @@ CFLAGS='-Wall -Wextra -pedantic -Wshadow -Werror -Wstrict-overflow -fsanitize=ad
 echo 'COMPILED! PRESS ENTER TO CONTINUE'
 read something
 
-./cupidfetch 2> log.txt
+./cupidfm 2> log.txt
 
