@@ -109,23 +109,22 @@ void draw_directory_window(
     wrefresh(window);
 }
 
-void draw_preview_window(WINDOW *window, const char *filename, const char *content) {
+void draw_preview_window(WINDOW *window, const char *current_directory, const char *selected_entry) {
     // Clear the window
     werase(window);
 
     // Draw a border around the window
     box(window, 0, 0);
 
-    // Display the filename
-    mvwprintw(window, 1, 1, "Previewing file: %.*s", COLS - 4, filename);
+    // Display the current file path
+    mvwprintw(window, 1, 1, "Current Directory: %.*s", COLS - 4, current_directory);
 
-    // Display the content of the file
-    mvwprintw(window, 3, 1, "Content:\n%.*s", LINES - 6, content);
+    // Display the selected entry (file or directory)
+    mvwprintw(window, 3, 1, "Selected Entry: %.*s", COLS - 4, selected_entry);
 
     // Refresh the window
     wrefresh(window);
 }
-
 
 void fix_cursor(CursorAndSlice *cas) {
     cas->cursor = MIN(cas->cursor, cas->num_files - 1);
@@ -168,14 +167,16 @@ void reload_directory(Vector *files, const char *current_directory) {
     Vector_sane_cap(files);
 }
 
-void navigate_up(CursorAndSlice *cas) {
+void navigate_up(CursorAndSlice *cas, const Vector *files, const char **selected_entry) {
     cas->cursor -= 1;
     fix_cursor(cas);
+    *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
 }
 
-void navigate_down(CursorAndSlice *cas) {
+void navigate_down(CursorAndSlice *cas, const Vector *files, const char **selected_entry) {
     cas->cursor += 1;
     fix_cursor(cas);
+    *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
 }
 
 void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_window_cas) {
@@ -218,28 +219,31 @@ void navigate_right(char **current_directory, const char *selected_entry, Vector
         SIZE saved_cursor = dir_window_cas->cursor;
 
         // Push the selected entry onto the stack
-        VecStack_push(&directoryStack, strdup(selected_entry));
+        char* new_entry = strdup(selected_entry);
+        if (new_entry == NULL) {
+            mvprintw(LINES - 1, 1, "Memory allocation error");
+            refresh();
+            return;
+        }
+        VecStack_push(&directoryStack, new_entry);
 
         // Update the current directory and reload files
         free(*current_directory);
         *current_directory = strdup(new_path);
-        reload_directory(files, *current_directory);
-
-        // Check for Memory Allocation Failures after reloading
         if (*current_directory == NULL) {
-            // Restore the cursor position in case of memory issues
-            dir_window_cas->cursor = saved_cursor;
-
-            // Display an error message
             mvprintw(LINES - 1, 1, "Memory allocation error");
             refresh();
-
-            // Handle other cleanup or error recovery as needed
+            VecStack_pop(&directoryStack);  // Rollback stack operation
             return;
         }
 
-        // Restore the cursor position
+        reload_directory(files, *current_directory);
+
+        // Restore the cursor position based on the new directory's contents
         dir_window_cas->cursor = saved_cursor;
+        dir_window_cas->start = 0; // Reset other parameters if needed
+        dir_window_cas->num_lines = LINES - 5;
+        dir_window_cas->num_files = Vector_len(*files);
     } else {
         // Display a message only if it's not a directory
         mvprintw(LINES - 1, 1, "Selected entry is a file or not a valid directory");
@@ -295,15 +299,11 @@ int main() {
         default_directory = "/";
 
     char *current_directory = strdup(default_directory);
+    const char *selected_entry = "";
+
 
     Vector files = Vector_new(10);
     append_files_to_vec(&files, current_directory);
-
-
-    // Dummy filename and content for demonstration
-    const char *filename = "";  // You can set a default filename if needed
-    const char *content = "This is a placeholder content.";  // You can set default content if needed
-
 
     CursorAndSlice dir_window_cas = {
         // Previously called start_entry_dir
@@ -330,6 +330,7 @@ int main() {
         .num_files = Vector_len(files),
     };
 
+
     enum {
         DIRECTORY_WIN_ACTIVE = 1,
         PREVIEW_WIN_ACTIVE = 2,
@@ -339,22 +340,26 @@ int main() {
     while ((ch = getch()) != KEY_F(1)) {
         // Handle key presses and update screen
 
+        // Update selected_entry based on user interaction
+        selected_entry = FileAttr_get_name(files.el[dir_window_cas.cursor]);
+
         // ERR is returned if nothing has been pressed for 100ms
         if (ch != ERR) {
             switch (ch) {
+                // Inside the switch statement in the main function
                 case KEY_UP:
                     // Move up in the active window
                     if (active_window == DIRECTORY_WIN_ACTIVE)
-                        navigate_up(&dir_window_cas);
+                        navigate_up(&dir_window_cas, &files, &selected_entry);
                     else
-                        navigate_up(&preview_window_cas);
+                        navigate_up(&preview_window_cas, &files, &selected_entry);
                     break;
                 case KEY_DOWN:
                     // Move down in the active window
                     if (active_window == DIRECTORY_WIN_ACTIVE)
-                        navigate_down(&dir_window_cas);
+                        navigate_down(&dir_window_cas, &files, &selected_entry);
                     else
-                        navigate_down(&preview_window_cas);
+                        navigate_down(&preview_window_cas, &files, &selected_entry);
                     break;
                 case KEY_LEFT:
                     // Navigate left (go up in the directory tree)
@@ -362,6 +367,9 @@ int main() {
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
                     // ...
+
+                    // Update selected_entry based on user interaction
+                    selected_entry = FileAttr_get_name(files.el[dir_window_cas.cursor]);
 
                     // Reset selected entries and scroll positions
                     dir_window_cas.cursor = preview_window_cas.cursor = 0;
@@ -381,6 +389,9 @@ int main() {
                     // Reload the file list for the new directory
                     // (similar code as initializing the file list)
                     // ...
+
+                    // Update selected_entry based on user interaction
+                    selected_entry = FileAttr_get_name(files.el[dir_window_cas.cursor]);
 
                     // FIXME: repeated code
                     dir_window_cas.cursor = preview_window_cas.cursor = 0;
@@ -406,12 +417,11 @@ int main() {
         );
 
         // Draw the preview window
-        draw_preview_window(previewwin, filename, content);
+        draw_preview_window(previewwin, current_directory, selected_entry);
 
         // Refresh the main window
         wrefresh(mainwin);
     }
-
 
     Vector_bye(&files);
     free(current_directory);
