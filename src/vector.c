@@ -7,7 +7,6 @@
 
 #define IMPL _PRIVATE_dont_access_PRIVATE_
 
-
 Vector Vector_new(size_t cap) {
     Vector v = {
         malloc((cap + 1) * sizeof(void *)),

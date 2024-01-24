@@ -9,7 +9,6 @@
 [[noreturn]]
 void die(int r, const char *format, ...);
 
-void path_join(char *result, const char *path1, const char *path2);
 void create_file(const char *filename);
 void edit_file(const char *filename);
 void display_files(const char *directory);
