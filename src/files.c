@@ -19,8 +19,14 @@ struct FileAttributes {
 };
 
 const char *FileAttr_get_name(FileAttr fa) {
-    return fa->name;
+    if (fa != NULL) {
+        return fa->name;
+    } else {
+        // Handle the case where fa is NULL
+        return "Unknown";
+    }
 }
+
 
 bool FileAttr_is_dir(FileAttr fa) {
     return fa->is_dir;
