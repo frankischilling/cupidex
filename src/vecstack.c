@@ -27,4 +27,3 @@ void *VecStack_peek(VecStack *v) {
 void VecStack_bye(VecStack *v) {
     Vector_bye(&v->v);
 }
-
