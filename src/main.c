@@ -122,6 +122,15 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     // Display the selected entry (file or directory)
     mvwprintw(window, 3, 1, "Selected Entry: %.*s", COLS - 4, selected_entry);
 
+    // todo display the file contents if possible (txt files ect)
+    // todo display the image if possible (jpg, png, ect)
+    // todo display file type and all info it can gather (size, permissions, ect)
+
+    // Display file info
+    char file_path[MAX_PATH_LENGTH];
+    path_join(file_path, current_directory, selected_entry);
+    display_file_info(window, file_path);
+
     // Refresh the window
     wrefresh(window);
 }
