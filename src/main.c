@@ -122,14 +122,15 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     // Display the selected entry (file or directory)
     mvwprintw(window, 3, 1, "Selected Entry: %.*s", COLS - 4, selected_entry);
 
-    // todo display the file contents if possible (txt files ect)
-    // todo display the image if possible (jpg, png, ect)
-    // todo display file type and all info it can gather (size, permissions, ect)
+    // Get the window's dimensions
+    int max_x, dummy_y;
+    getmaxyx(window, dummy_y, max_x);
+    (void)dummy_y;  // Indicate that dummy_y is intentionally unused
 
     // Display file info
     char file_path[MAX_PATH_LENGTH];
     path_join(file_path, current_directory, selected_entry);
-    display_file_info(window, file_path);
+    display_file_info(window, file_path, max_x);
 
     // Refresh the window
     wrefresh(window);
@@ -269,6 +270,8 @@ void navigate_right(char **current_directory, const char *selected_entry, Vector
 }
 
 // TODO: make it adapt itself when the screen gets resized
+
+// TODO: fix when resize the files go voer the border
 int main() {
     WINDOW *mainwin;
     initscr();

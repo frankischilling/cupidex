@@ -135,7 +135,7 @@ char* format_file_size(char *buffer, size_t size) {
     return buffer;
 }
 
-void display_file_info(WINDOW *window, const char *file_path) {
+void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     struct stat file_stat;
 
     // Get file information
@@ -149,13 +149,18 @@ void display_file_info(WINDOW *window, const char *file_path) {
         // If it's a directory, calculate its size using get_directory_size
         long dir_size = get_directory_size(file_path);
         char fileSizeStr[20];
-        mvwprintw(window, 5, 1, "Directory Size: %s", format_file_size(fileSizeStr, dir_size));
+        mvwprintw(window, 5, 1, "Directory Size: %.*s", max_x - 4, format_file_size(fileSizeStr, dir_size));
     } else {
         // If it's a regular file, display its size directly
         char fileSizeStr[20];
-        mvwprintw(window, 5, 1, "File Size: %s", format_file_size(fileSizeStr, file_stat.st_size));
+        mvwprintw(window, 5, 1, "File Size: %.*s", max_x - 4, format_file_size(fileSizeStr, file_stat.st_size));
     }
 
-    mvwprintw(window, 6, 1, "File Permissions: %o", file_stat.st_mode & 0777);
-    mvwprintw(window, 7, 1, "Last Modification Time: %s", ctime(&file_stat.st_mtime));
+    char permissions[22];  // Increase the size of the array
+    sprintf(permissions, "File Permissions: %o", file_stat.st_mode & 0777);
+    mvwprintw(window, 6, 1, "%.*s", max_x - 4, permissions);
+
+    char modTime[50];
+    strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
+    mvwprintw(window, 7, 1, "Last Modification Time: %.24s", modTime);
 }
