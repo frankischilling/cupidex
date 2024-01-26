@@ -209,6 +209,12 @@ void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_
 
 // Function to navigate right
 void navigate_right(char **current_directory, const char *selected_entry, Vector *files, CursorAndSlice *dir_window_cas) {
+    // Check if the selected entry is a directory
+    if (!FileAttr_is_dir(files->el[dir_window_cas->cursor])) {
+        // If not a directory, simply return
+        return;
+    }
+
     char new_path[MAX_PATH_LENGTH];
     path_join(new_path, *current_directory, selected_entry);
 
