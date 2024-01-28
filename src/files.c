@@ -91,6 +91,13 @@ void append_files_to_vec(Vector *v, const char *name) {
 }
 
 // Recursive function to calculate directory size
+// NOTE: this function may take long, it might be better to have the size of
+//       the directories displayed as "-" until we have a value. Use of "du" or
+//       another already existent tool might be better. The sizes should
+//       probably be cached.
+//       fork() -> exec() (if using du)
+//       fork() -> calculate directory size and return it somehow (maybe print
+//       as binary to the stdout)
 long get_directory_size(const char *dir_path) {
     DIR *dir;
     struct dirent *entry;
@@ -114,6 +121,7 @@ long get_directory_size(const char *dir_path) {
             continue;
         // If entry is a directory, recursively calculate its size
         if (S_ISDIR(statbuf.st_mode))
+            // This recursion may cause a stack overflow
             total_size += get_directory_size(path);
         else
             total_size += statbuf.st_size; // Add size of regular file
@@ -124,7 +132,9 @@ long get_directory_size(const char *dir_path) {
 }
 
 char* format_file_size(char *buffer, size_t size) {
-    const char *units[] = {"B", "KB", "MB", "GB", "TB"};
+    // iB for multiples of 1024, B for multiples of 1000
+    // so, KiB = 1024, KB = 1000
+    const char *units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
     int i = 0;
     double fileSize = (double)size;
     while (fileSize >= 1024 && i < 4) {
@@ -148,6 +158,8 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     if (S_ISDIR(file_stat.st_mode)) {
         // If it's a directory, calculate its size using get_directory_size
         long dir_size = get_directory_size(file_path);
+        // Check if this array is big enough, greater than needed is better
+        // than smaller
         char fileSizeStr[20];
         mvwprintw(window, 5, 1, "Directory Size: %.*s", max_x - 4, format_file_size(fileSizeStr, dir_size));
     } else {
@@ -156,7 +168,9 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
         mvwprintw(window, 5, 1, "File Size: %.*s", max_x - 4, format_file_size(fileSizeStr, file_stat.st_size));
     }
 
-    char permissions[22];  // Increase the size of the array
+    // Check if this array is big enough for the number
+    // My check (needs review): 18 (label) +
+    char permissions[22];
     sprintf(permissions, "File Permissions: %o", file_stat.st_mode & 0777);
     mvwprintw(window, 6, 1, "%.*s", max_x - 4, permissions);
 
