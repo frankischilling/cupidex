@@ -1,8 +1,10 @@
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <string.h>
+// File: cil.c
+// -----------------------
+#include <stdarg.h>   // for va_list, va_start, va_end
+#include <stdbool.h>  // for bool, true, false
+#include <stddef.h>   // for NULL
+#include <stdio.h>    // for printf, vprintf, fgets, stdin
+#include <string.h>   // for strcspn
 
 #include "cli.h"
 

@@ -1,19 +1,22 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <curses.h>
-#include <dirent.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <string.h>
-
-#include <utils.h>
-#include <vector.h>
-#include <files.h>
-#include <vecstack.h>
+// File: main.c
+// -----------------------
+#include <stdio.h>     // for snprintf
+#include <stdlib.h>    // for free, malloc
+#include <unistd.h>    // for getenv
+#include <curses.h>    // for initscr, noecho, cbreak, keypad, curs_set, timeout, endwin, LINES, COLS, getch, timeout, wtimeout, ERR, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_F1, newwin, subwin, box, wrefresh, werase, mvwprintw, wattron, wattroff, A_REVERSE, A_BOLD, getmaxyx, refresh
+#include <dirent.h>    // for opendir, readdir, closedir
+#include <sys/types.h> // for types like SIZE
+#include <sys/stat.h>  // for struct stat
+#include <string.h>    // for strlen, strcpy, strdup, strrchr, strtok, strncmp
+// Local includes
+#include <utils.h>     // for MIN, MAX
+#include <vector.h>    // for Vector
+#include <files.h>     // for FileAttr, FileAttr_get_name, FileAttr_is_dir
+#include <vecstack.h>  // for VecStack, VecStack_empty, VecStack_push, VecStack_pop
+#include <files.h>     // for path_join, is_supported_file_type, display_file_info
+#include <utils.h>     // for die
 
 #define MAX_PATH_LENGTH 256
-
 VecStack directoryStack;
 
 typedef struct {
@@ -58,7 +61,7 @@ void draw_directory_window(
     // Draw a border around the window
     box(window, 0, 0);
     // Display the directory path
-    mvwprintw(window, 1, 1, "Directory: %.*s", cols - 4, directory);
+    mvwprintw(window, 1, 2, "Directory: %.*s", cols - 4, directory);
 
     // Additional logic to fix the displayed directory path
     char corrected_directory[MAX_PATH_LENGTH];
@@ -117,20 +120,42 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     box(window, 0, 0);
 
     // Display the current file path
-    mvwprintw(window, 1, 1, "Current Directory: %.*s", COLS - 4, current_directory);
+    mvwprintw(window, 1, 2, "Current Directory: %.*s", COLS - 4, current_directory);
 
     // Display the selected entry (file or directory)
-    mvwprintw(window, 3, 1, "Selected Entry: %.*s", COLS - 4, selected_entry);
+    mvwprintw(window, 3, 2, "Selected Entry: %.*s", COLS - 4, selected_entry);
 
     // Get the window's dimensions
-    int max_x, dummy_y;
-    getmaxyx(window, dummy_y, max_x);
-    (void)dummy_y;  // Indicate that dummy_y is intentionally unused
+    int max_x, max_y;
+    getmaxyx(window, max_y, max_x);
 
     // Display file info
     char file_path[MAX_PATH_LENGTH];
     path_join(file_path, current_directory, selected_entry);
     display_file_info(window, file_path, max_x);
+
+    // Check if the selected entry is a supported file type
+    if (is_supported_file_type(file_path)) {
+        FILE *file = fopen(file_path, "r");
+        if (file) {
+            char line[256];
+            int line_num = 9; // Start displaying file content from line 9
+
+            // Add a blank line before the file content
+            mvwprintw(window, line_num++, 2, " ");
+
+            while (fgets(line, sizeof(line), file) && line_num < max_y - 2) {
+                mvwprintw(window, line_num++, 2, "%.*s", max_x - 4, line);
+            }
+
+            // Add a blank line after the file content
+            mvwprintw(window, line_num++, 2, " ");
+
+            fclose(file);
+        } else {
+            mvwprintw(window, 9, 2, "Unable to open file for preview");
+        }
+    }
 
     // Refresh the window
     wrefresh(window);

@@ -1,17 +1,21 @@
-#define _POSIX_C_SOURCE 200112L
-#include <stdlib.h>
-#include <stddef.h>
-#include <sys/types.h>
-#include <string.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <time.h>
-#include <main.h>
-#include <utils.h>
-#include <files.h>
-#include <curses.h>
+// File: files.c
+// -----------------------
+#define _POSIX_C_SOURCE 200112L    // for strdup
+#include <stdlib.h>                // for malloc, free
+#include <stddef.h>                // for NULL
+#include <sys/types.h>             // for ino_t
+#include <string.h>                // for strdup
+#include <dirent.h>                // for DIR, struct dirent, opendir, readdir, closedir
+#include <unistd.h>                // for lstat
+#include <stdio.h>                 // for snprintf
+#include <sys/stat.h>              // for struct stat, lstat, S_ISDIR
+#include <time.h>                  // for strftime
+#include <main.h>                  // for FileAttr, Vector, Vector_add, Vector_len, Vector_set_len
+#include <utils.h>                 // for path_join, is_directory
+#include <files.h>                 // for FileAttributes, FileAttr, MAX_PATH_LENGTH
+#include <curses.h>                // for WINDOW, mvwprintw
+#include <stdbool.h>               // for bool, true, false
+#include <string.h>                // for strcmp
 
 #define MAX_PATH_LENGTH 1024
 
@@ -161,20 +165,44 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
         // Check if this array is big enough, greater than needed is better
         // than smaller
         char fileSizeStr[20];
-        mvwprintw(window, 5, 1, "Directory Size: %.*s", max_x - 4, format_file_size(fileSizeStr, dir_size));
+        mvwprintw(window, 5, 2, "Directory Size: %.*s", max_x - 4, format_file_size(fileSizeStr, dir_size));
     } else {
         // If it's a regular file, display its size directly
         char fileSizeStr[20];
-        mvwprintw(window, 5, 1, "File Size: %.*s", max_x - 4, format_file_size(fileSizeStr, file_stat.st_size));
+        mvwprintw(window, 5, 2, "File Size: %.*s", max_x - 4, format_file_size(fileSizeStr, file_stat.st_size));
     }
 
     // Check if this array is big enough for the number
     // My check (needs review): 18 (label) +
     char permissions[22];
     sprintf(permissions, "File Permissions: %o", file_stat.st_mode & 0777);
-    mvwprintw(window, 6, 1, "%.*s", max_x - 4, permissions);
+    mvwprintw(window, 6, 2, "%.*s", max_x - 4, permissions);
 
     char modTime[50];
     strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
-    mvwprintw(window, 7, 1, "Last Modification Time: %.24s", modTime);
+    mvwprintw(window, 7, 2, "Last Modification Time: %.24s", modTime);
+}
+
+/**
+ * Checks if the given file has a supported extension.
+ *
+ * @param filename The name of the file to check.
+ * @return true if the file has a supported extension, false otherwise.
+ */
+bool is_supported_file_type(const char *filename) {
+    const char *extensions[] = {
+        ".txt", ".c", ".java", ".py", ".cpp", ".h", ".hpp", ".js", ".html", ".css",
+        ".md", ".json", ".xml", ".sh", ".bat", ".ini", ".conf", ".log", ".csv", ".tsv",
+        ".yaml", ".yml", ".toml", ".rb", ".php", ".pl", ".rs", ".go", ".swift", ".kt"
+    };
+    size_t num_extensions = sizeof(extensions) / sizeof(extensions[0]);
+    const char *ext = strrchr(filename, '.');
+    if (ext) {
+        for (size_t i = 0; i < num_extensions; i++) {
+            if (strcmp(ext, extensions[i]) == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
 }

@@ -1,15 +1,17 @@
-#include <errno.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/wait.h>
-#include <dirent.h>
-#include <curses.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
+// File: utils.c
+// -----------------------
+#include <errno.h>     // for errno
+#include <stdarg.h>    // for va_list, va_start, va_end
+#include <stdio.h>     // for fprintf, stderr, vfprintf
+#include <stdlib.h>    // for exit
+#include <string.h>    // for strerror
+#include <sys/wait.h>  // for WEXITSTATUS, WIFEXITED
+#include <dirent.h>    // for DIR, struct dirent, opendir, readdir, closedir
+#include <curses.h>    // for initscr, noecho, keypad, stdscr, clear, printw, refresh, mvaddch, getch, endwin
+#include <unistd.h>    // for system
+#include <sys/types.h> // for stat
+#include <sys/stat.h>  // for stat, S_ISDIR
+// Local includes
 #include "utils.h"
 
 #define MAX_PATH_LENGTH 256

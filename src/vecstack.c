@@ -1,4 +1,6 @@
-#include "vecstack.h"
+// File: src/vecstack.c
+// -----------------------
+#include "vecstack.h" // for VecStack, VecStack_empty, VecStack_push, VecStack_pop, VecStack_peek, VecStack_bye
 
 VecStack VecStack_empty() {
     VecStack r = {Vector_new(0)};

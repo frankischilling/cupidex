@@ -1,9 +1,10 @@
-#include <stddef.h>
-#include <stdlib.h>
+// File: src/vector.c
+// -----------------------
+#include <stddef.h> // for size_t
+#include <stdlib.h> // for malloc, free, realloc
+#include <utils.h>  // for MAX
 
-#include <utils.h>
-
-#include "vector.h"
+#include "vector.h" // for Vector
 
 #define IMPL _PRIVATE_dont_access_PRIVATE_
 
