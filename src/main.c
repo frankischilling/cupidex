@@ -52,31 +52,17 @@ void draw_directory_window(
 ) {
     [[maybe_unused]]
     int cols, lines;
-    // No & are needed since this is a macro. Source: X/Open Curses, Issue 4,
-    // Version 2. COLS and LINES seem to refer to the terminal size, not the
-    // window's.
     getmaxyx(window, lines, cols);
 
     werase(window);
-    // Draw a border around the window
     box(window, 0, 0);
-    // Display the directory path
-    mvwprintw(window, 1, 2, "Directory: %.*s", cols - 4, directory);
+    mvwprintw(window, 0, 2, "Directory: %.*s", cols - 4, directory);
 
-    // Additional logic to fix the displayed directory path
-    char corrected_directory[MAX_PATH_LENGTH];
-    if (directory[0] != '/') {
-        snprintf(corrected_directory, MAX_PATH_LENGTH, "/%s", directory);
-        mvwprintw(window, 1, 1, "Directory: %.*s", cols - 4, corrected_directory);
-    }
-
-    // Display files in the directory within the visible range
     for (SIZE i = 0; i < files_len; i++) {
         const char *current_name = FileAttr_get_name(files[i]);
         const char *extension = strrchr(current_name, '.');
         int extension_len = extension ? strlen(extension) : 0;
 
-        // Truncate file names that exceed the window width
         int max_display_length = cols - 4;
 
         if (i == selected_entry)
@@ -87,19 +73,19 @@ void draw_directory_window(
         if ((int)strlen(current_name) > max_display_length) {
             if (extension_len && extension_len + 5 < max_display_length)
                 mvwprintw(
-                    window, i + 4, 2,
+                    window, i + 2, 2,
                     "%.*s... %s",
                     max_display_length - 4 - extension_len, current_name,
                     extension
                 );
             else
                 mvwprintw(
-                    window, i + 4, 2,
+                    window, i + 2, 2,
                     "%.*s...",
                     max_display_length - 3, current_name
                 );
         } else {
-            mvwprintw(window, i + 4, 2, "%s", current_name);
+            mvwprintw(window, i + 2, 2, "%s", current_name);
         }
 
         if (i == selected_entry)
@@ -108,7 +94,6 @@ void draw_directory_window(
             wattroff(window, A_BOLD);
     }
 
-    // Refresh the window
     wrefresh(window);
 }
 
@@ -119,19 +104,16 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     // Draw a border around the window
     box(window, 0, 0);
 
-    // Display the current file path
-    mvwprintw(window, 1, 2, "Current Directory: %.*s", COLS - 4, current_directory);
-
-    // Display the selected entry (file or directory)
-    mvwprintw(window, 3, 2, "Selected Entry: %.*s", COLS - 4, selected_entry);
+    // Display the selected entry path
+    char file_path[MAX_PATH_LENGTH];
+    path_join(file_path, current_directory, selected_entry);
+    mvwprintw(window, 0, 2, "Selected Entry: %.*s", COLS - 4, file_path);
 
     // Get the window's dimensions
     int max_x, max_y;
     getmaxyx(window, max_y, max_x);
 
     // Display file info
-    char file_path[MAX_PATH_LENGTH];
-    path_join(file_path, current_directory, selected_entry);
     display_file_info(window, file_path, max_x);
 
     // Check if the selected entry is a supported file type
@@ -139,13 +121,15 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
         FILE *file = fopen(file_path, "r");
         if (file) {
             char line[256];
-            int line_num = 9; // Start displaying file content from line 9
+            int line_num = 5; // Start displaying file content from line 5
 
             // Add a blank line before the file content
             mvwprintw(window, line_num++, 2, " ");
 
-            while (fgets(line, sizeof(line), file) && line_num < max_y - 2) {
-                mvwprintw(window, line_num++, 2, "%.*s", max_x - 4, line);
+            // add a line, mentioning "Previewing file: <filename>"
+			            mvwprintw(window, line_num++, 2, "Previewing file: %s", selected_entry);
+			while (fgets(line, sizeof(line), file) && line_num < max_y - 2) {
+                mvwprintw(window, line_num++, 2, "%.*s", max_x - 2, line);
             }
 
             // Add a blank line after the file content
@@ -153,14 +137,13 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
 
             fclose(file);
         } else {
-            mvwprintw(window, 9, 2, "Unable to open file for preview");
+            mvwprintw(window, 5, 2, "Unable to open file for preview");
         }
     }
 
     // Refresh the window
     wrefresh(window);
 }
-
 void fix_cursor(CursorAndSlice *cas) {
     cas->cursor = MIN(cas->cursor, cas->num_files - 1);
     cas->cursor = MAX(0, cas->cursor);

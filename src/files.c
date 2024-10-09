@@ -154,7 +154,7 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
 
     // Get file information
     if (stat(file_path, &file_stat) == -1) {
-        mvwprintw(window, 5, 1, "Unable to retrieve file information");
+        mvwprintw(window, 1, 2, "Unable to retrieve file information");
         return;
     }
 
@@ -162,27 +162,22 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     if (S_ISDIR(file_stat.st_mode)) {
         // If it's a directory, calculate its size using get_directory_size
         long dir_size = get_directory_size(file_path);
-        // Check if this array is big enough, greater than needed is better
-        // than smaller
         char fileSizeStr[20];
-        mvwprintw(window, 5, 2, "Directory Size: %.*s", max_x - 4, format_file_size(fileSizeStr, dir_size));
+        mvwprintw(window, 2, 2, "Directory Size: %.*s", max_x - 4, format_file_size(fileSizeStr, dir_size));
     } else {
         // If it's a regular file, display its size directly
         char fileSizeStr[20];
-        mvwprintw(window, 5, 2, "File Size: %.*s", max_x - 4, format_file_size(fileSizeStr, file_stat.st_size));
+        mvwprintw(window, 2, 2, "File Size: %.*s", max_x - 4, format_file_size(fileSizeStr, file_stat.st_size));
     }
 
-    // Check if this array is big enough for the number
-    // My check (needs review): 18 (label) +
     char permissions[22];
     sprintf(permissions, "File Permissions: %o", file_stat.st_mode & 0777);
-    mvwprintw(window, 6, 2, "%.*s", max_x - 4, permissions);
+    mvwprintw(window, 3, 2, "%.*s", max_x - 4, permissions);
 
     char modTime[50];
     strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
-    mvwprintw(window, 7, 2, "Last Modification Time: %.24s", modTime);
+    mvwprintw(window, 4, 2, "Last Modification Time: %.24s", modTime);
 }
-
 /**
  * Checks if the given file has a supported extension.
  *
