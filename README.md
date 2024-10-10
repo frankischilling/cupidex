@@ -73,4 +73,4 @@ Contributions are welcome! Please submit a pull request or open an issue for any
 
 ## License
 
-This project is licensed under the terms of the MIT License.
+This project is licensed under the GNU General Public License v3.0 terms.
