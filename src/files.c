@@ -16,6 +16,8 @@
 #include <curses.h>                // for WINDOW, mvwprintw
 #include <stdbool.h>               // for bool, true, false
 #include <string.h>                // for strcmp
+#include <limits.h>                // For PATH_MAX
+#include <fcntl.h>                 // For O_RDONLY
 
 #define MAX_PATH_LENGTH 1024
 
@@ -34,9 +36,22 @@ const char *FileAttr_get_name(FileAttr fa) {
     }
 }
 
-
 bool FileAttr_is_dir(FileAttr fa) {
     return fa->is_dir;
+}
+
+char* format_file_size(char *buffer, size_t size) {
+    // iB for multiples of 1024, B for multiples of 1000
+    // so, KiB = 1024, KB = 1000
+    const char *units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
+    int i = 0;
+    double fileSize = (double)size;
+    while (fileSize >= 1024 && i < 4) {
+        fileSize /= 1024;
+        i++;
+    }
+    sprintf(buffer, "%.2f %s", fileSize, units[i]);
+    return buffer;
 }
 
 FileAttr mk_attr(const char *name, bool is_dir, ino_t inode) {
@@ -107,65 +122,55 @@ long get_directory_size(const char *dir_path) {
     struct dirent *entry;
     struct stat statbuf;
     long total_size = 0;
+    const long MAX_SIZE_THRESHOLD = 1000L * 1024 * 1024 * 1024 * 1024; // 1000 TiB
 
-    // Open directory
     if (!(dir = opendir(dir_path)))
         return -1;
 
-    // Iterate over directory entries
     while ((entry = readdir(dir)) != NULL) {
         char path[MAX_PATH_LENGTH];
-        // Skip "." and ".." entries
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
-        // Construct full path to entry
         snprintf(path, sizeof(path), "%s/%s", dir_path, entry->d_name);
-        // Get entry's information
         if (lstat(path, &statbuf) == -1)
             continue;
-        // If entry is a directory, recursively calculate its size
-        if (S_ISDIR(statbuf.st_mode))
-            // This recursion may cause a stack overflow
-            total_size += get_directory_size(path);
-        else
-            total_size += statbuf.st_size; // Add size of regular file
+        if (S_ISDIR(statbuf.st_mode)) {
+            long dir_size = get_directory_size(path);
+            if (dir_size == -2) {
+                closedir(dir);
+                return -2;
+            }
+            total_size += dir_size;
+        } else {
+            total_size += statbuf.st_size;
+        }
+        if (total_size > MAX_SIZE_THRESHOLD) {
+            closedir(dir);
+            return -2;
+        }
     }
 
     closedir(dir);
     return total_size;
 }
-
-char* format_file_size(char *buffer, size_t size) {
-    // iB for multiples of 1024, B for multiples of 1000
-    // so, KiB = 1024, KB = 1000
-    const char *units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
-    int i = 0;
-    double fileSize = (double)size;
-    while (fileSize >= 1024 && i < 4) {
-        fileSize /= 1024;
-        i++;
-    }
-    sprintf(buffer, "%.2f %s", fileSize, units[i]);
-    return buffer;
-}
-
+// Function to display file information
 void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     struct stat file_stat;
 
-    // Get file information
     if (stat(file_path, &file_stat) == -1) {
         mvwprintw(window, 1, 2, "Unable to retrieve file information");
         return;
     }
 
-    // Display file information
     if (S_ISDIR(file_stat.st_mode)) {
-        // If it's a directory, calculate its size using get_directory_size
         long dir_size = get_directory_size(file_path);
-        char fileSizeStr[20];
-        mvwprintw(window, 2, 2, "Directory Size: %.*s", max_x - 4, format_file_size(fileSizeStr, dir_size));
+        if (dir_size == -2) {
+            mvwprintw(window, 2, 2, "Directory Size: Uncalcable");
+        } else {
+            char fileSizeStr[20];
+            mvwprintw(window, 2, 2, "Directory Size: %.*s", max_x - 4, format_file_size(fileSizeStr, dir_size));
+        }
     } else {
-        // If it's a regular file, display its size directly
         char fileSizeStr[20];
         mvwprintw(window, 2, 2, "File Size: %.*s", max_x - 4, format_file_size(fileSizeStr, file_stat.st_size));
     }
@@ -177,6 +182,92 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     char modTime[50];
     strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
     mvwprintw(window, 4, 2, "Last Modification Time: %.24s", modTime);
+}
+void edit_file_in_terminal(WINDOW *window, const char *file_path) {
+    int fd = open(file_path, O_RDWR | O_CREAT, 0644);
+    if (fd == -1) {
+        mvwprintw(window, 1, 2, "Unable to open file for editing");
+        wrefresh(window);
+        return;
+    }
+
+    // Clear the window before editing
+    werase(window);
+    box(window, 0, 0);
+
+    int ch;
+    int row = 1;
+    char line[256];
+    FILE *file = fdopen(fd, "r+");
+
+    // Read the file content into the window
+    while (fgets(line, sizeof(line), file) && row < LINES - 2) {
+        mvwprintw(window, row++, 2, "%s", line);
+    }
+    wrefresh(window);
+
+    // Enable cursor and allow editing
+    curs_set(1);
+    keypad(window, TRUE);  // Enable keypad mode to handle special keys
+    wmove(window, 1, 2);
+
+    bool exit_edit_mode = false;
+    while (!exit_edit_mode && (ch = wgetch(window)) != KEY_F(1)) {
+        int y, x;
+        getyx(window, y, x);
+        switch (ch) {
+        case KEY_UP:
+            if (y > 1) wmove(window, y - 1, x);
+            break;
+        case KEY_DOWN:
+            if (y < LINES - 2) wmove(window, y + 1, x);
+            break;
+        case KEY_LEFT:
+            if (x > 2) wmove(window, y, x - 1);
+            break;
+        case KEY_RIGHT:
+            if (x < COLS - 2) wmove(window, y, x + 1);
+            break;
+        case KEY_BACKSPACE:
+        case 127:
+            if (x > 2) {
+                mvwdelch(window, y, x - 1);
+                wmove(window, y, x - 1);
+            }
+            break;
+        case '\n':
+            if (y < LINES - 2) wmove(window, y + 1, 2);
+            break;
+        case 19:  // Ctrl+S
+            // Save the edited content back to the file
+            fflush(file);
+            ftruncate(fd, 0);
+            lseek(fd, 0, SEEK_SET);
+            for (int i = 1; i < LINES - 2; i++) {
+                mvwinnstr(window, i, 2, line, sizeof(line) - 1);
+                write(fd, line, strlen(line));
+                write(fd, "\n", 1);
+            }
+            mvwprintw(window, LINES - 2, 2, "File saved");
+            wrefresh(window);
+            break;
+        case 5:  // Ctrl+E
+            mvwprintw(window, LINES - 2, 2, "Exiting edit mode");
+            wrefresh(window);
+            exit_edit_mode = true;
+            break;
+        default:
+            if (ch >= 32 && ch <= 126) {
+                waddch(window, ch);
+            }
+            break;
+        }
+        wrefresh(window);
+    }
+
+    fclose(file);
+    close(fd);
+    curs_set(0);
 }
 /**
  * Checks if the given file has a supported extension.

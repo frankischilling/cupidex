@@ -17,6 +17,9 @@
 #include <utils.h>     // for die
 
 #define MAX_PATH_LENGTH 256
+#define TAB 9
+#define CTRL_E 5
+
 VecStack directoryStack;
 
 typedef struct {
@@ -42,7 +45,7 @@ void updateDirectoryStack(const char *newDirectory) {
 bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
 }
-
+// tab / clicking on the different windows will move the cursor to that window, will be used later for editing files
 void draw_directory_window(
     WINDOW *window,
     const char *directory,
@@ -286,76 +289,45 @@ int main() {
     noecho();
     cbreak();
     keypad(stdscr, TRUE);
-    // Hides the cursor
-    // X/Open Curses, Issue 4, Version 2
     curs_set(0);
-
-    // getch() or other read operations, instead of blocking until a key is
-    // pressed, block for at most 100 milliseconds. This is useful since it
-    // doesn't completely freeze the screen if no keys are typed.
-    // This behaviour is described by both X/Open Curses, Issue 4, Version 2
-    // and X/Open Curses, Issue 7.
     timeout(100);
 
-
-    // Create main window
     mainwin = newwin(LINES, COLS, 0, 0);
+    wtimeout(mainwin, 100);
 
-    wtimeout(mainwin, 100);  // Adjust the timeout value as needed
-
-    // Calculate dimensions for the directory and preview windows
     SIZE dir_win_width = COLS / 2;
     SIZE preview_win_width = COLS - dir_win_width;
 
-    // Create directory window
     WINDOW *dirwin = subwin(mainwin, LINES, dir_win_width, 0, 0);
     box(dirwin, 0, 0);
     wrefresh(dirwin);
 
-    // Create preview window
     WINDOW *previewwin = subwin(mainwin, LINES, preview_win_width, 0, dir_win_width);
     box(previewwin, 0, 0);
     wrefresh(previewwin);
 
-    directoryStack = VecStack_empty();  // Initialize the directory stack
+    directoryStack = VecStack_empty();
 
-    // Get the default root directory ("/") or user's home directory
-    const char *default_directory = getenv("HOME");
-    if (default_directory == NULL)
-        default_directory = "/";
+    char *current_directory = malloc(MAX_PATH_LENGTH);
+    if (current_directory == NULL) {
+        die(1, "Memory allocation error");
+    }
 
-    char *current_directory = strdup(default_directory);
+    if (getcwd(current_directory, MAX_PATH_LENGTH) == NULL) {
+        die(1, "Unable to get current working directory");
+    }
+
     const char *selected_entry = "";
-
 
     Vector files = Vector_new(10);
     append_files_to_vec(&files, current_directory);
 
     CursorAndSlice dir_window_cas = {
-        // Previously called start_entry_dir
         .start = 0,
-        // Previously called selected_entry_dir
         .cursor = 0,
-        // What used to be end_entry_dir was LINES - 6, and it represented the
-        // last valid entry. Therefore the length is LINES - 6 + 1 - start
         .num_lines = LINES - 5,
-        // Used for cursor validation
         .num_files = Vector_len(files),
     };
-
-    CursorAndSlice preview_window_cas = {
-        // Previously called start_entry_preview
-        .start = 0,
-        // Previously called selected_entry_preview
-        .cursor = 0,
-        // What used to be end_entry_preview was LINES - 6, and it represented
-        // the last valid entry. Therefore the length is LINES - 6 + 1 - start
-        .num_lines = LINES - 5,
-        // FIXME: I don't think it should be validated by the number of files
-        //        since it isn't the dir window
-        .num_files = Vector_len(files),
-    };
-
 
     enum {
         DIRECTORY_WIN_ACTIVE = 1,
@@ -364,92 +336,63 @@ int main() {
 
     int ch;
     while ((ch = getch()) != KEY_F(1)) {
-        // Handle key presses and update screen
-
-        // Update selected_entry based on user interaction
-        selected_entry = FileAttr_get_name(files.el[dir_window_cas.cursor]);
-
-        // ERR is returned if nothing has been pressed for 100ms
         if (ch != ERR) {
             switch (ch) {
-                // Inside the switch statement in the main function
-                case KEY_UP:
-                    // Move up in the active window
-                    if (active_window == DIRECTORY_WIN_ACTIVE)
-                        navigate_up(&dir_window_cas, &files, &selected_entry);
-                    else
-                        navigate_up(&preview_window_cas, &files, &selected_entry);
-                    break;
-                case KEY_DOWN:
-                    // Move down in the active window
-                    if (active_window == DIRECTORY_WIN_ACTIVE)
-                        navigate_down(&dir_window_cas, &files, &selected_entry);
-                    else
-                        navigate_down(&preview_window_cas, &files, &selected_entry);
-                    break;
-                case KEY_LEFT:
-                    // Navigate left (go up in the directory tree)
+            case KEY_UP:
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
+                    navigate_up(&dir_window_cas, &files, &selected_entry);
+                }
+                break;
+            case KEY_DOWN:
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
+                    navigate_down(&dir_window_cas, &files, &selected_entry);
+                }
+                break;
+            case KEY_LEFT:
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
                     navigate_left(&current_directory, &files, &dir_window_cas);
-                    // Reload the file list for the new directory
-                    // (similar code as initializing the file list)
-                    // ...
-
-                    // Update selected_entry based on user interaction
-                    selected_entry = FileAttr_get_name(files.el[dir_window_cas.cursor]);
-
-                    // Reset selected entries and scroll positions
-                    dir_window_cas.cursor = preview_window_cas.cursor = 0;
-                    dir_window_cas.start = preview_window_cas.start = 0;
-                    dir_window_cas.num_lines = preview_window_cas.num_lines = LINES - 5;
-                    dir_window_cas.num_files = preview_window_cas.num_files = Vector_len(files);
-                    break;
-                case KEY_RIGHT:
-                    // Navigate right (go into the selected directory)
-                    navigate_right(
-                            &current_directory,
-                            FileAttr_get_name(files.el[dir_window_cas.cursor]),
-                            &files,
-                            &dir_window_cas
-                    );
-
-                    // Reload the file list for the new directory
-                    // (similar code as initializing the file list)
-                    // ...
-
-                    // FIXME: repeated code
-                    dir_window_cas.cursor = preview_window_cas.cursor = 0;
-                    dir_window_cas.start = preview_window_cas.start = 0;
-                    dir_window_cas.num_lines = preview_window_cas.num_lines = LINES - 5;
-                    dir_window_cas.num_files = preview_window_cas.num_files = Vector_len(files);
-                    break;
-                default:
-                    // Print the key code for debugging purposes
-                    mvwprintw(mainwin, LINES - 1, 1, "Key pressed: %d", ch);
-                    break;
+                }
+                break;
+            case KEY_RIGHT:
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
+                    navigate_right(&current_directory, selected_entry, &files, &dir_window_cas);
+                }
+                break;
+            case TAB:
+                active_window = (active_window == DIRECTORY_WIN_ACTIVE) ? PREVIEW_WIN_ACTIVE : DIRECTORY_WIN_ACTIVE;
+                break;
+            case CTRL_E:
+                if (active_window == PREVIEW_WIN_ACTIVE) {
+                    char file_path[MAX_PATH_LENGTH];
+                    path_join(file_path, current_directory, selected_entry);
+                    edit_file_in_terminal(previewwin, file_path);
+                }
+                break;
+            default:
+                break;
             }
         }
 
-        // Draw the directory window
-        draw_directory_window(
-            dirwin, current_directory,
-            (FileAttr *)&files.el[dir_window_cas.start],
-            // TODO: make sure that its impossible for num_lines to get past
-            //       num_files.
-            MIN(dir_window_cas.num_lines, dir_window_cas.num_files - dir_window_cas.start),
-            dir_window_cas.cursor - dir_window_cas.start
-        );
-
-        // Draw the preview window
+        // Refresh the windows
+        draw_directory_window(dirwin, current_directory, (FileAttr *)&files.el[dir_window_cas.start], MIN(dir_window_cas.num_lines, dir_window_cas.num_files - dir_window_cas.start), dir_window_cas.cursor - dir_window_cas.start);
         draw_preview_window(previewwin, current_directory, selected_entry);
 
-        // Refresh the main window
+        // Highlight the active window
+        if (active_window == DIRECTORY_WIN_ACTIVE) {
+            wattron(dirwin, A_REVERSE);
+            mvwprintw(dirwin, dir_window_cas.cursor - dir_window_cas.start + 1, 1, "%s", FileAttr_get_name(files.el[dir_window_cas.cursor]));
+            wattroff(dirwin, A_REVERSE);
+        } else {
+            wattron(previewwin, A_REVERSE);
+            mvwprintw(previewwin, 1, 1, "Preview Window Active");
+            wattroff(previewwin, A_REVERSE);
+        }
+
         wrefresh(mainwin);
     }
 
     Vector_bye(&files);
     free(current_directory);
-
-    // Clean up
     endwin();
     return 0;
 }
