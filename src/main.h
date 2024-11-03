@@ -7,4 +7,5 @@
 
 void path_join(char *result, const char *path1, const char *path2);
 
+
 #endif //CUPIDFM_MAIN_H

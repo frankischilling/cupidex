@@ -22,6 +22,7 @@
 #define MAX_PATH_LENGTH 1024
 #define MIN_INT_SIZE_T(x, y) (((size_t)(x) > (y)) ? (y) : (x))
 
+
 struct FileAttributes {
     char *name;  // Change from char name*;
     ino_t inode;
@@ -171,7 +172,7 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     struct stat file_stat;
 
     if (stat(file_path, &file_stat) == -1) {
-        mvwprintw(window, 1, 2, "Unable to retrieve file information");
+        mvwprintw(window, 2, 2, "Unable to retrieve file information");
         return;
     }
 
@@ -220,18 +221,18 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int 
     wrefresh(window);
 }
 
-void edit_file_in_terminal(WINDOW *window, const char *file_path) {
+void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifwin) {
     int fd = open(file_path, O_RDWR | O_CREAT, 0644);
     if (fd == -1) {
-        mvwprintw(window, 1, 2, "Unable to open file for editing");
-        wrefresh(window);
+        mvwprintw(notifwin, 1, 2, "Unable to open file for editing");
+        wrefresh(notifwin);
         return;
     }
 
     FILE *file = fdopen(fd, "r+");
     if (file == NULL) {
-        mvwprintw(window, 1, 2, "Unable to open file stream");
-        wrefresh(window);
+        mvwprintw(notifwin, 1, 2, "Unable to open file stream");
+        wrefresh(notifwin);
         close(fd);
         return;
     }
@@ -387,16 +388,16 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path) {
                 // Reopen the file in write mode
                 file = fopen(file_path, "w");
                 if (file == NULL) {
-                    mvwprintw(window, max_y - 2, 2, "Error opening file for writing");
-                    wrefresh(window);
+                    mvwprintw(notifwin, max_y - 2, 2, "Error opening file for writing");
+                    wrefresh(notifwin);
                     break;
                 }
 
                 // Write the content from the text buffer to the file
                 for (int i = 0; i < text_buffer.num_lines; i++) {
                     if (fprintf(file, "%s\n", text_buffer.lines[i]) < 0) {
-                        mvwprintw(window, max_y - 2, 2, "Error writing to file");
-                        wrefresh(window);
+                        mvwprintw(notifwin, max_y - 2, 2, "Error writing to file");
+                        wrefresh(notifwin);
                         break;
                     }
                 }
@@ -407,13 +408,14 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path) {
                 fclose(file);
                 file = fopen(file_path, "r+");
                 if (file == NULL) {
-                    mvwprintw(window, max_y - 2, 2, "Error reopening file");
-                    wrefresh(window);
+                    mvwprintw(notifwin, max_y - 2, 2, "Error reopening file");
+                    wrefresh(notifwin);
                     break;
                 }
 
-                mvwprintw(window, max_y - 2, 2, "File saved");
-                wrefresh(window);
+                werase(notifwin);
+                mvwprintw(notifwin, 0, 0, "File saved: %s", file_path);
+                wrefresh(notifwin);
                 break;
             }
             case 5:   // Ctrl+E

@@ -8,6 +8,7 @@
 #include <sys/types.h> // for types like SIZE
 #include <sys/stat.h>  // for struct stat
 #include <string.h>    // for strlen, strcpy, strdup, strrchr, strtok, strncmp
+#include <signal.h>    // for signal, SIGWINCH
 // Local includes
 #include <utils.h>     // for MIN, MAX
 #include <vector.h>    // for Vector
@@ -19,6 +20,12 @@
 #define MAX_PATH_LENGTH 256
 #define TAB 9
 #define CTRL_E 5
+
+// Global variables
+WINDOW *notifwin;
+WINDOW *mainwin;
+WINDOW *dirwin;
+WINDOW *previewwin;
 
 VecStack directoryStack;
 
@@ -280,31 +287,76 @@ void navigate_right(char **current_directory, const char *selected_entry, Vector
     dir_window_cas->num_files = Vector_len(*files);
 }
 
-// TODO: make it adapt itself when the screen gets resized
+void handle_winch(int sig) {
+    (void)sig;  // Suppress unused parameter warning
 
+    // Reinitialize the screen to update LINES and COLS
+    endwin();
+    refresh();
+    clear();
+
+    // Adjust notifwin position and size
+    wresize(notifwin, 1, COLS);
+    mvwin(notifwin, LINES - 1, 0);
+    wclear(notifwin);
+    box(notifwin, 0, 0);
+    wrefresh(notifwin);
+
+    // Adjust mainwin and its subwindows
+    wresize(mainwin, LINES - 1, COLS);
+    wclear(mainwin);
+    box(mainwin, 0, 0);
+    wrefresh(mainwin);
+
+    // Adjust dirwin and previewwin sizes
+    SIZE dir_win_width = COLS / 2;
+    SIZE preview_win_width = COLS - dir_win_width;
+
+    wresize(dirwin, LINES - 1, dir_win_width);
+    wresize(previewwin, LINES - 1, preview_win_width);
+    mvwin(previewwin, 0, dir_win_width);
+
+    wclear(dirwin);
+    box(dirwin, 0, 0);
+    wrefresh(dirwin);
+
+    wclear(previewwin);
+    box(previewwin, 0, 0);
+    wrefresh(previewwin);
+}
+
+// TODO: make it adapt itself when the screen gets resized
+// todo: make a bottom win to show error messages, current commands, and keybinds being used
 // TODO: fix when resize the files go voer the border
 int main() {
-    WINDOW *mainwin;
-    initscr();
+    initscr();  // Initialize the screen
     noecho();
     cbreak();
     keypad(stdscr, TRUE);
     curs_set(0);
     timeout(100);
 
-    mainwin = newwin(LINES, COLS, 0, 0);
+    // Initialize notifwin after initscr()
+    notifwin = newwin(1, COLS, LINES - 1, 0);
+    // Initialize notifwin
+    werase(notifwin);
+    wrefresh(notifwin);
+
+    mainwin = newwin(LINES - 1, COLS, 0, 0);
     wtimeout(mainwin, 100);
 
     SIZE dir_win_width = COLS / 2;
     SIZE preview_win_width = COLS - dir_win_width;
 
-    WINDOW *dirwin = subwin(mainwin, LINES, dir_win_width, 0, 0);
+    dirwin = subwin(mainwin, LINES - 1, dir_win_width, 0, 0);
     box(dirwin, 0, 0);
     wrefresh(dirwin);
 
-    WINDOW *previewwin = subwin(mainwin, LINES, preview_win_width, 0, dir_win_width);
+    previewwin = subwin(mainwin, LINES - 1, preview_win_width, 0, dir_win_width);
     box(previewwin, 0, 0);
     wrefresh(previewwin);
+
+    signal(SIGWINCH, handle_winch);  // Handle window resizing
 
     directoryStack = VecStack_empty();
 
@@ -336,41 +388,77 @@ int main() {
 
     int ch;
     while ((ch = getch()) != KEY_F(1)) {
+        bool should_clear_notif = true;
         if (ch != ERR) {
             switch (ch) {
             case KEY_UP:
                 if (active_window == DIRECTORY_WIN_ACTIVE) {
                     navigate_up(&dir_window_cas, &files, &selected_entry);
+                    werase(notifwin);
+                    mvwprintw(notifwin, 0, 0, "Moved up");
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
                 }
                 break;
             case KEY_DOWN:
                 if (active_window == DIRECTORY_WIN_ACTIVE) {
                     navigate_down(&dir_window_cas, &files, &selected_entry);
+                    // Update notifwin
+                    werase(notifwin);
+                    mvwprintw(notifwin, 0, 0, "Moved down");
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
                 }
-                break;
+                    break;
             case KEY_LEFT:
                 if (active_window == DIRECTORY_WIN_ACTIVE) {
                     navigate_left(&current_directory, &files, &dir_window_cas);
+                    // Update notifwin
+                    werase(notifwin);
+                    mvwprintw(notifwin, 0, 0, "Navigated to parent directory");
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
                 }
                 break;
             case KEY_RIGHT:
                 if (active_window == DIRECTORY_WIN_ACTIVE) {
                     navigate_right(&current_directory, selected_entry, &files, &dir_window_cas);
+                    // Update notifwin
+                    werase(notifwin);
+                    mvwprintw(notifwin, 0, 0, "Entered directory: %s", selected_entry);
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
                 }
                 break;
             case TAB:
                 active_window = (active_window == DIRECTORY_WIN_ACTIVE) ? PREVIEW_WIN_ACTIVE : DIRECTORY_WIN_ACTIVE;
+                // Update notifwin
+                werase(notifwin);
+                mvwprintw(notifwin, 0, 0, "Switched to %s window", (active_window == DIRECTORY_WIN_ACTIVE) ? "Directory" : "Preview");
+                wrefresh(notifwin);
+                should_clear_notif = false;
                 break;
             case CTRL_E:
                 if (active_window == PREVIEW_WIN_ACTIVE) {
                     char file_path[MAX_PATH_LENGTH];
                     path_join(file_path, current_directory, selected_entry);
-                    edit_file_in_terminal(previewwin, file_path);
+                    edit_file_in_terminal(previewwin, file_path, notifwin);
+                    // Update notifwin
+                    werase(notifwin);
+                    mvwprintw(notifwin, 0, 0, "Editing file: %s", selected_entry);
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
                 }
                 break;
             default:
                 break;
             }
+        }
+
+        // Clear notification window only if no new notification was displayed
+        if (should_clear_notif) {
+            werase(notifwin);
+            wrefresh(notifwin);
         }
 
         // Refresh the windows
@@ -389,10 +477,17 @@ int main() {
         }
 
         wrefresh(mainwin);
+        // Note: Ensure you refresh the notification window after other windows
+        wrefresh(notifwin);
     }
 
+    // Clean up
     Vector_bye(&files);
     free(current_directory);
+    delwin(dirwin);
+    delwin(previewwin);
+    delwin(notifwin);
+    delwin(mainwin);
     endwin();
     return 0;
 }
