@@ -4,7 +4,7 @@
 #define EDITOR_COMMAND "nano"  // Change this to your preferred default text editor
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define MIN(x, y) (((x) > (y)) ? (y) : (x))
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 [[noreturn]]
 void die(int r, const char *format, ...);

@@ -20,12 +20,25 @@
 #include <fcntl.h>                 // For O_RDONLY
 
 #define MAX_PATH_LENGTH 1024
+#define MIN_INT_SIZE_T(x, y) (((size_t)(x) > (y)) ? (y) : (x))
 
 struct FileAttributes {
     char *name;  // Change from char name*;
     ino_t inode;
     bool is_dir;
 };
+
+typedef struct {
+    char **lines;      // Dynamic array of strings
+    int num_lines;     // Current number of lines
+    int capacity;      // Total capacity of the array
+} TextBuffer;
+
+void init_text_buffer(TextBuffer *buffer) {
+    buffer->capacity = 100; // Initial capacity
+    buffer->num_lines = 0;
+    buffer->lines = malloc(sizeof(char*) * buffer->capacity);
+}
 
 const char *FileAttr_get_name(FileAttr fa) {
     if (fa != NULL) {
@@ -183,6 +196,30 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
     mvwprintw(window, 4, 2, "Last Modification Time: %.24s", modTime);
 }
+
+void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int cursor_line, int cursor_col) {
+    werase(window);
+    box(window, 0, 0);
+
+    int max_y, max_x;
+    getmaxyx(window, max_y, max_x);
+
+    for (int i = 0; i < max_y - 2 && (start_line + i) < buffer->num_lines; i++) {
+        // Highlight the current line
+        if ((start_line + i) == cursor_line) {
+            wattron(window, A_REVERSE);
+        }
+        mvwprintw(window, i + 1, 2, "%.*s", max_x - 4, buffer->lines[start_line + i]);
+        if ((start_line + i) == cursor_line) {
+            wattroff(window, A_REVERSE);
+        }
+    }
+
+    // Move cursor to the appropriate position
+    wmove(window, cursor_line - start_line + 1, cursor_col + 2);
+    wrefresh(window);
+}
+
 void edit_file_in_terminal(WINDOW *window, const char *file_path) {
     int fd = open(file_path, O_RDWR | O_CREAT, 0644);
     if (fd == -1) {
@@ -191,84 +228,225 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path) {
         return;
     }
 
+    FILE *file = fdopen(fd, "r+");
+    if (file == NULL) {
+        mvwprintw(window, 1, 2, "Unable to open file stream");
+        wrefresh(window);
+        close(fd);
+        return;
+    }
+
     // Clear the window before editing
     werase(window);
     box(window, 0, 0);
 
     int ch;
-    int row = 1;
-    char line[256];
-    FILE *file = fdopen(fd, "r+");
+    // int row = 1; // Remove this line since 'row' is unused
 
-    // Read the file content into the window
-    while (fgets(line, sizeof(line), file) && row < LINES - 2) {
-        mvwprintw(window, row++, 2, "%s", line);
+    TextBuffer text_buffer;
+    init_text_buffer(&text_buffer);
+
+    char line[256];
+
+    // Read the file content into the text buffer
+    while (fgets(line, sizeof(line), file)) {
+        // Remove newline character
+        line[strcspn(line, "\n")] = '\0';
+
+        // Resize buffer if needed
+        if (text_buffer.num_lines >= text_buffer.capacity) {
+            text_buffer.capacity *= 2;
+            text_buffer.lines = realloc(text_buffer.lines, sizeof(char*) * text_buffer.capacity);
+        }
+
+        text_buffer.lines[text_buffer.num_lines++] = strdup(line);
     }
-    wrefresh(window);
+
+    // Call render_text_buffer to display the initial content
+    render_text_buffer(window, &text_buffer, 0, 0, 0);
 
     // Enable cursor and allow editing
     curs_set(1);
     keypad(window, TRUE);  // Enable keypad mode to handle special keys
     wmove(window, 1, 2);
 
+    // Initialize cursor position and start line for scrolling
+    int cursor_line = 0;
+    int cursor_col = 0;
+    int start_line = 0;
+
     bool exit_edit_mode = false;
     while (!exit_edit_mode && (ch = wgetch(window)) != KEY_F(1)) {
-        int y, x;
-        getyx(window, y, x);
+        int max_y, max_x;
+        getmaxyx(window, max_y, max_x);
+        (void)max_x;  // Suppress unused variable warning
+
         switch (ch) {
-        case KEY_UP:
-            if (y > 1) wmove(window, y - 1, x);
-            break;
-        case KEY_DOWN:
-            if (y < LINES - 2) wmove(window, y + 1, x);
-            break;
-        case KEY_LEFT:
-            if (x > 2) wmove(window, y, x - 1);
-            break;
-        case KEY_RIGHT:
-            if (x < COLS - 2) wmove(window, y, x + 1);
-            break;
-        case KEY_BACKSPACE:
-        case 127:
-            if (x > 2) {
-                mvwdelch(window, y, x - 1);
-                wmove(window, y, x - 1);
+            case KEY_UP:
+                if (cursor_line > 0) {
+                    cursor_line--;
+                    if (cursor_line < start_line) {
+                        start_line--;
+                    }
+                    cursor_col = MIN(cursor_col, (int)strlen(text_buffer.lines[cursor_line]));
+                }
+                break;
+            case KEY_DOWN:
+                if (cursor_line < text_buffer.num_lines - 1) {
+                    cursor_line++;
+                    if (cursor_line - start_line >= max_y - 2) {
+                        start_line = cursor_line - (max_y - 3);
+                    }
+                    if (cursor_line < start_line) {
+                        start_line = cursor_line;
+                    }
+                    cursor_col = MIN(cursor_col, (int)strlen(text_buffer.lines[cursor_line]));
+                }
+                break;
+            case KEY_LEFT:
+                if (cursor_col > 0) {
+                    cursor_col--;
+                } else if (cursor_line > 0) {
+                    cursor_line--;
+                    cursor_col = (int)strlen(text_buffer.lines[cursor_line]);
+                    if (cursor_line < start_line) {
+                        start_line--;
+                    }
+                }
+                break;
+            case KEY_RIGHT:
+                if (cursor_col < (int)strlen(text_buffer.lines[cursor_line])) {
+                    cursor_col++;
+                } else if (cursor_line < text_buffer.num_lines - 1) {
+                    cursor_line++;
+                    cursor_col = 0;
+                    if (cursor_line - start_line >= max_y - 2) {
+                        start_line++;
+                    }
+                }
+                break;
+            case '\n':
+            {
+                // Split the current line at the cursor position
+                char *current_line = text_buffer.lines[cursor_line];
+                char *new_line = strdup(current_line + cursor_col);
+                current_line[cursor_col] = '\0';
+
+                // Insert the new line into the buffer
+                if (text_buffer.num_lines >= text_buffer.capacity) {
+                    text_buffer.capacity *= 2;
+                    text_buffer.lines = realloc(text_buffer.lines, sizeof(char*) * text_buffer.capacity);
+                }
+                for (int i = text_buffer.num_lines; i > cursor_line + 1; i--) {
+                    text_buffer.lines[i] = text_buffer.lines[i - 1];
+                }
+                text_buffer.lines[cursor_line + 1] = new_line;
+                text_buffer.num_lines++;
+
+                cursor_line++;
+                cursor_col = 0;
+                if (cursor_line - start_line >= max_y - 2) {
+                    start_line++;
+                }
             }
-            break;
-        case '\n':
-            if (y < LINES - 2) wmove(window, y + 1, 2);
-            break;
-        case 19:  // Ctrl+S
-            // Save the edited content back to the file
-            fflush(file);
-            ftruncate(fd, 0);
-            lseek(fd, 0, SEEK_SET);
-            for (int i = 1; i < LINES - 2; i++) {
-                mvwinnstr(window, i, 2, line, sizeof(line) - 1);
-                write(fd, line, strlen(line));
-                write(fd, "\n", 1);
+                break;
+            case KEY_BACKSPACE:
+            case 127:
+                if (cursor_col > 0) {
+                    // Remove character before cursor
+                    char *current_line = text_buffer.lines[cursor_line];
+                    memmove(&current_line[cursor_col - 1], &current_line[cursor_col], strlen(current_line) - cursor_col + 1);
+                    cursor_col--;
+                } else if (cursor_line > 0) {
+                    // Merge with previous line
+                    int prev_len = (int)strlen(text_buffer.lines[cursor_line - 1]);
+                    int curr_len = (int)strlen(text_buffer.lines[cursor_line]);
+
+                    text_buffer.lines[cursor_line - 1] = realloc(text_buffer.lines[cursor_line - 1], prev_len + curr_len + 1);
+                    strcat(text_buffer.lines[cursor_line - 1], text_buffer.lines[cursor_line]);
+                    free(text_buffer.lines[cursor_line]);
+
+                    // Shift lines up
+                    for (int i = cursor_line; i < text_buffer.num_lines - 1; i++) {
+                        text_buffer.lines[i] = text_buffer.lines[i + 1];
+                    }
+                    text_buffer.num_lines--;
+
+                    cursor_line--;
+                    cursor_col = prev_len;
+                    if (cursor_line < start_line) {
+                        start_line--;
+                    }
+                }
+                break;
+            case 7:  // Ctrl+G
+            {
+                // Close the current file stream
+                fclose(file);
+
+                // Reopen the file in write mode
+                file = fopen(file_path, "w");
+                if (file == NULL) {
+                    mvwprintw(window, max_y - 2, 2, "Error opening file for writing");
+                    wrefresh(window);
+                    break;
+                }
+
+                // Write the content from the text buffer to the file
+                for (int i = 0; i < text_buffer.num_lines; i++) {
+                    if (fprintf(file, "%s\n", text_buffer.lines[i]) < 0) {
+                        mvwprintw(window, max_y - 2, 2, "Error writing to file");
+                        wrefresh(window);
+                        break;
+                    }
+                }
+
+                fflush(file);  // Ensure all data is written
+
+                // Close and reopen the file in read/write mode for further operations
+                fclose(file);
+                file = fopen(file_path, "r+");
+                if (file == NULL) {
+                    mvwprintw(window, max_y - 2, 2, "Error reopening file");
+                    wrefresh(window);
+                    break;
+                }
+
+                mvwprintw(window, max_y - 2, 2, "File saved");
+                wrefresh(window);
+                break;
             }
-            mvwprintw(window, LINES - 2, 2, "File saved");
-            wrefresh(window);
-            break;
-        case 5:  // Ctrl+E
-            mvwprintw(window, LINES - 2, 2, "Exiting edit mode");
-            wrefresh(window);
-            exit_edit_mode = true;
-            break;
-        default:
-            if (ch >= 32 && ch <= 126) {
-                waddch(window, ch);
-            }
-            break;
+            case 5:   // Ctrl+E
+                exit_edit_mode = true;
+                break;
+            default:
+                if (ch >= 32 && ch <= 126) {
+                    // Insert character at cursor position
+                    char *current_line = text_buffer.lines[cursor_line];
+                    int line_len = (int)strlen(current_line);
+                    current_line = realloc(current_line, line_len + 2); // +1 for new char, +1 for null terminator
+                    memmove(&current_line[cursor_col + 1], &current_line[cursor_col], line_len - cursor_col + 1);
+                    current_line[cursor_col] = ch;
+                    text_buffer.lines[cursor_line] = current_line;
+                    cursor_col++;
+                }
+                break;
         }
-        wrefresh(window);
+
+        // Render the updated buffer
+        render_text_buffer(window, &text_buffer, start_line, cursor_line, cursor_col);
     }
 
     fclose(file);
-    close(fd);
     curs_set(0);
+
+    // Clean up
+    for (int i = 0; i < text_buffer.num_lines; i++) {
+        free(text_buffer.lines[i]);
+    }
+    free(text_buffer.lines);
 }
+
 /**
  * Checks if the given file has a supported extension.
  *
