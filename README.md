@@ -66,6 +66,9 @@ Use the arrow keys to navigate the directory structure:
 - **Up/Down**: Move between files
 - **Left/Right**: Navigate to parent/child directories
 - **F1**: Exit the application
+- **TAB**: Change between preview and directory window
+  - **CONTROL+E**: While in the preview window you can edit within the file and save with
+  - **CONTROL+S**: Save files you are editing within the terminal 
 
 ## Contributing
 
