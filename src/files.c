@@ -18,10 +18,34 @@
 #include <string.h>                // for strcmp
 #include <limits.h>                // For PATH_MAX
 #include <fcntl.h>                 // For O_RDONLY
+#include <magic.h>                 // For libmagic
 
 #define MAX_PATH_LENGTH 1024
 #define MIN_INT_SIZE_T(x, y) (((size_t)(x) > (y)) ? (y) : (x))
 
+// Supported MIME types
+const char *supported_mime_types[] = {
+        "text/plain",
+        "text/x-c",
+        "application/json",
+        "application/xml",
+        "text/x-shellscript",
+        "text/x-python",
+        "text/x-java-source",
+        "text/html",
+        "text/css",
+        "text/x-c++src",
+        "application/x-yaml",
+        "application/x-sh",     // Shell scripts
+        "application/x-perl",    // Perl scripts
+        "application/x-php",     // PHP scripts
+        "text/x-rustsrc",        // Rust source files
+        "text/x-go",             // Go source files
+        "text/x-swift",          // Swift source files
+        "text/x-kotlin"          // Kotlin source files
+};
+
+size_t num_supported_mime_types = sizeof(supported_mime_types) / sizeof(supported_mime_types[0]);
 
 struct FileAttributes {
     char *name;  // Change from char name*;
@@ -171,31 +195,70 @@ long get_directory_size(const char *dir_path) {
 void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     struct stat file_stat;
 
+    // Attempt to retrieve file statistics
     if (stat(file_path, &file_stat) == -1) {
         mvwprintw(window, 2, 2, "Unable to retrieve file information");
         return;
     }
 
+    // Define a fixed width for labels to ensure alignment
+    int label_width = 20;
+
+    // Display File Size or Directory Size
     if (S_ISDIR(file_stat.st_mode)) {
         long dir_size = get_directory_size(file_path);
         if (dir_size == -2) {
-            mvwprintw(window, 2, 2, "Directory Size: Uncalcable");
+            mvwprintw(window, 2, 2, "%-*s %s", label_width, "Directory Size:", "Uncalculable");
         } else {
             char fileSizeStr[20];
-            mvwprintw(window, 2, 2, "Directory Size: %.*s", max_x - 4, format_file_size(fileSizeStr, dir_size));
+            format_file_size(fileSizeStr, dir_size);
+            mvwprintw(window, 2, 2, "%-*s %s", label_width, "Directory Size:", fileSizeStr);
         }
     } else {
         char fileSizeStr[20];
-        mvwprintw(window, 2, 2, "File Size: %.*s", max_x - 4, format_file_size(fileSizeStr, file_stat.st_size));
+        format_file_size(fileSizeStr, file_stat.st_size);
+        mvwprintw(window, 2, 2, "%-*s %s", label_width, "File Size:", fileSizeStr);
     }
 
+    // Display File Permissions
     char permissions[22];
-    sprintf(permissions, "File Permissions: %o", file_stat.st_mode & 0777);
-    mvwprintw(window, 3, 2, "%.*s", max_x - 4, permissions);
+    snprintf(permissions, sizeof(permissions), "%o", file_stat.st_mode & 0777);
+    mvwprintw(window, 3, 2, "%-*s %s", label_width, "File Permissions:", permissions);
 
+    // Display Last Modification Time
     char modTime[50];
     strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
-    mvwprintw(window, 4, 2, "Last Modification Time: %.24s", modTime);
+    mvwprintw(window, 4, 2, "%-*s %.24s", label_width, "Last Modification Time:", modTime);
+
+    // Display MIME type using libmagic
+    magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
+    if (magic_cookie == NULL) {
+        mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", "Error initializing magic library");
+        return;
+    }
+    if (magic_load(magic_cookie, NULL) != 0) {
+        mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", magic_error(magic_cookie));
+        magic_close(magic_cookie);
+        return;
+    }
+    const char *mime_type = magic_file(magic_cookie, file_path);
+    if (mime_type == NULL) {
+        mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", "Unknown (error)");
+    } else {
+        // Define value_width as size_t to match strlen's return type
+        size_t value_width = (size_t)(max_x - 2 - label_width - 1); // 2 for left margin, 1 for space
+
+        // Truncate MIME type string if it's too long
+        if (strlen(mime_type) > value_width) {
+            char truncated_mime[value_width + 1];
+            strncpy(truncated_mime, mime_type, value_width);
+            truncated_mime[value_width] = '\0';
+            mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", truncated_mime);
+        } else {
+            mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", mime_type);
+        }
+    }
+    magic_close(magic_cookie);
 }
 
 void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int cursor_line, int cursor_col) {
@@ -450,25 +513,46 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
 }
 
 /**
- * Checks if the given file has a supported extension.
+ * Checks if the given file has a supported MIME type.
  *
  * @param filename The name of the file to check.
- * @return true if the file has a supported extension, false otherwise.
+ * @return true if the file has a supported MIME type, false otherwise.
  */
 bool is_supported_file_type(const char *filename) {
-    const char *extensions[] = {
-        ".txt", ".c", ".java", ".py", ".cpp", ".h", ".hpp", ".js", ".html", ".css",
-        ".md", ".json", ".xml", ".sh", ".bat", ".ini", ".conf", ".log", ".csv", ".tsv",
-        ".yaml", ".yml", ".toml", ".rb", ".php", ".pl", ".rs", ".go", ".swift", ".kt"
-    };
-    size_t num_extensions = sizeof(extensions) / sizeof(extensions[0]);
-    const char *ext = strrchr(filename, '.');
-    if (ext) {
-        for (size_t i = 0; i < num_extensions; i++) {
-            if (strcmp(ext, extensions[i]) == 0) {
-                return true;
-            }
+    magic_t magic_cookie;
+    bool supported = false;
+
+    // Open a magic cookie for checking MIME types
+    magic_cookie = magic_open(MAGIC_MIME_TYPE);
+    if (magic_cookie == NULL) {
+        fprintf(stderr, "Unable to initialize magic library\n");
+        return false;
+    }
+
+    // Load the default magic database
+    if (magic_load(magic_cookie, NULL) != 0) {
+        fprintf(stderr, "Cannot load magic database: %s\n", magic_error(magic_cookie));
+        magic_close(magic_cookie);
+        return false;
+    }
+
+    // Get the MIME type of the file
+    const char *mime_type = magic_file(magic_cookie, filename);
+    if (mime_type == NULL) {
+        fprintf(stderr, "Could not determine file type: %s\n", magic_error(magic_cookie));
+        magic_close(magic_cookie);
+        return false;
+    }
+
+    // Check if MIME type is in supported types
+    for (size_t i = 0; i < num_supported_mime_types; i++) {
+        if (strcmp(mime_type, supported_mime_types[i]) == 0) {
+            supported = true;
+            break;
         }
     }
-    return false;
+
+    // Clean up
+    magic_close(magic_cookie);
+    return supported;
 }

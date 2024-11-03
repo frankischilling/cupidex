@@ -52,13 +52,28 @@ void updateDirectoryStack(const char *newDirectory) {
 bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
 }
+
+// Helper function to count total lines in a file
+int get_total_lines(const char *file_path) {
+    FILE *file = fopen(file_path, "r");
+    if (!file) return 0;
+
+    int total_lines = 0;
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        total_lines++;
+    }
+
+    fclose(file);
+    return total_lines;
+}
 // tab / clicking on the different windows will move the cursor to that window, will be used later for editing files
 void draw_directory_window(
-    WINDOW *window,
-    const char *directory,
-    FileAttr *files,
-    SIZE files_len,
-    SIZE selected_entry
+        WINDOW *window,
+        const char *directory,
+        FileAttr *files,
+        SIZE files_len,
+        SIZE selected_entry
 ) {
     [[maybe_unused]]
     int cols, lines;
@@ -83,16 +98,16 @@ void draw_directory_window(
         if ((int)strlen(current_name) > max_display_length) {
             if (extension_len && extension_len + 5 < max_display_length)
                 mvwprintw(
-                    window, i + 2, 2,
-                    "%.*s... %s",
-                    max_display_length - 4 - extension_len, current_name,
-                    extension
+                        window, i + 2, 2,
+                        "%.*s... %s",
+                        max_display_length - 4 - extension_len, current_name,
+                        extension
                 );
             else
                 mvwprintw(
-                    window, i + 2, 2,
-                    "%.*s...",
-                    max_display_length - 3, current_name
+                        window, i + 2, 2,
+                        "%.*s...",
+                        max_display_length - 3, current_name
                 );
         } else {
             mvwprintw(window, i + 2, 2, "%s", current_name);
@@ -107,7 +122,7 @@ void draw_directory_window(
     wrefresh(window);
 }
 
-void draw_preview_window(WINDOW *window, const char *current_directory, const char *selected_entry) {
+void draw_preview_window(WINDOW *window, const char *current_directory, const char *selected_entry, int start_line) {
     // Clear the window
     werase(window);
 
@@ -132,20 +147,32 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
         if (file) {
             char line[256];
             int line_num = 5; // Start displaying file content from line 5
+            int current_line = 0;
+            int lines_displayed = 0;
 
             // Add a blank line before the file content
             mvwprintw(window, line_num++, 2, " ");
 
-            // add a line, mentioning "Previewing file: <filename>"
-			            mvwprintw(window, line_num++, 2, "Previewing file: %s", selected_entry);
-			while (fgets(line, sizeof(line), file) && line_num < max_y - 2) {
-                mvwprintw(window, line_num++, 2, "%.*s", max_x - 2, line);
+            // Skip lines until start_line
+            while (current_line < start_line && fgets(line, sizeof(line), file)) {
+                current_line++;
+            }
+
+            // Display the file content starting from start_line
+            while (fgets(line, sizeof(line), file) && line_num < max_y - 2) {
+                mvwprintw(window, line_num++, 2, "%.*s", max_x - 4, line);
+                lines_displayed++;
             }
 
             // Add a blank line after the file content
             mvwprintw(window, line_num++, 2, " ");
 
             fclose(file);
+
+            // If no lines were displayed, inform the user
+            if (lines_displayed == 0) {
+                mvwprintw(window, line_num++, 2, "End of file");
+            }
         } else {
             mvwprintw(window, 5, 2, "Unable to open file for preview");
         }
@@ -154,6 +181,7 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     // Refresh the window
     wrefresh(window);
 }
+
 void fix_cursor(CursorAndSlice *cas) {
     cas->cursor = MIN(cas->cursor, cas->num_files - 1);
     cas->cursor = MAX(0, cas->cursor);
@@ -326,8 +354,8 @@ void handle_winch(int sig) {
 }
 
 // TODO: make it adapt itself when the screen gets resized
-// todo: make a bottom win to show error messages, current commands, and keybinds being used
-// TODO: fix when resize the files go voer the border
+// TODO: make a bottom win to show error messages, current commands, and keybinds being used
+// TODO: fix when resize the files go over the border
 int main() {
     initscr();  // Initialize the screen
     noecho();
@@ -338,7 +366,6 @@ int main() {
 
     // Initialize notifwin after initscr()
     notifwin = newwin(1, COLS, LINES - 1, 0);
-    // Initialize notifwin
     werase(notifwin);
     wrefresh(notifwin);
 
@@ -375,10 +402,10 @@ int main() {
     append_files_to_vec(&files, current_directory);
 
     CursorAndSlice dir_window_cas = {
-        .start = 0,
-        .cursor = 0,
-        .num_lines = LINES - 5,
-        .num_files = Vector_len(files),
+            .start = 0,
+            .cursor = 0,
+            .num_lines = LINES - 5,
+            .num_files = Vector_len(files),
     };
 
     enum {
@@ -386,72 +413,114 @@ int main() {
         PREVIEW_WIN_ACTIVE = 2,
     } active_window = DIRECTORY_WIN_ACTIVE;
 
+    int preview_start_line = 0; // Initialize the preview start line
+
     int ch;
     while ((ch = getch()) != KEY_F(1)) {
         bool should_clear_notif = true;
         if (ch != ERR) {
             switch (ch) {
-            case KEY_UP:
-                if (active_window == DIRECTORY_WIN_ACTIVE) {
-                    navigate_up(&dir_window_cas, &files, &selected_entry);
-                    werase(notifwin);
-                    mvwprintw(notifwin, 0, 0, "Moved up");
-                    wrefresh(notifwin);
-                    should_clear_notif = false;
-                }
-                break;
-            case KEY_DOWN:
-                if (active_window == DIRECTORY_WIN_ACTIVE) {
-                    navigate_down(&dir_window_cas, &files, &selected_entry);
-                    // Update notifwin
-                    werase(notifwin);
-                    mvwprintw(notifwin, 0, 0, "Moved down");
-                    wrefresh(notifwin);
-                    should_clear_notif = false;
-                }
+                case KEY_UP:
+                    if (active_window == DIRECTORY_WIN_ACTIVE) {
+                        navigate_up(&dir_window_cas, &files, &selected_entry);
+                        preview_start_line = 0; // Reset scrolling when selection changes
+                        werase(notifwin);
+                        mvwprintw(notifwin, 0, 0, "Moved up");
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    } else if (active_window == PREVIEW_WIN_ACTIVE) {
+                        if (preview_start_line > 0) {
+                            preview_start_line--;
+                            werase(notifwin);
+                            mvwprintw(notifwin, 0, 0, "Scrolled up");
+                            wrefresh(notifwin);
+                            should_clear_notif = false;
+                        }
+                    }
                     break;
-            case KEY_LEFT:
-                if (active_window == DIRECTORY_WIN_ACTIVE) {
-                    navigate_left(&current_directory, &files, &dir_window_cas);
+                case KEY_DOWN:
+                    if (active_window == DIRECTORY_WIN_ACTIVE) {
+                        navigate_down(&dir_window_cas, &files, &selected_entry);
+                        preview_start_line = 0; // Reset scrolling when selection changes
+                        werase(notifwin);
+                        mvwprintw(notifwin, 0, 0, "Moved down");
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    } else if (active_window == PREVIEW_WIN_ACTIVE) {
+                        // Determine the total lines in the file
+                        char file_path[MAX_PATH_LENGTH];
+                        path_join(file_path, current_directory, selected_entry);
+                        int total_lines = get_total_lines(file_path);
+
+                        // Get window dimensions to calculate max_start_line
+                        int max_x, max_y;
+                        getmaxyx(previewwin, max_y, max_x);
+                        (void)max_x; // Mark max_x as unused to prevent compiler warning
+
+                        int content_height = max_y - 7; // Adjust based on your window layout
+
+                        int max_start_line = total_lines - content_height;
+                        if (max_start_line < 0) max_start_line = 0;
+
+                        if (preview_start_line < max_start_line) {
+                            preview_start_line++;
+                            werase(notifwin);
+                            mvwprintw(notifwin, 0, 0, "Scrolled down");
+                            wrefresh(notifwin);
+                            should_clear_notif = false;
+                        }
+                    }
+                    break;
+                case KEY_LEFT:
+                    if (active_window == DIRECTORY_WIN_ACTIVE) {
+                        navigate_left(&current_directory, &files, &dir_window_cas);
+                        preview_start_line = 0; // Reset scrolling when directory changes
+                        // Update notifwin
+                        werase(notifwin);
+                        mvwprintw(notifwin, 0, 0, "Navigated to parent directory");
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    }
+                    break;
+                case KEY_RIGHT:
+                    if (active_window == DIRECTORY_WIN_ACTIVE) {
+                        navigate_right(&current_directory, selected_entry, &files, &dir_window_cas);
+                        preview_start_line = 0; // Reset scrolling when directory changes
+                        // Update notifwin
+                        werase(notifwin);
+                        mvwprintw(notifwin, 0, 0, "Entered directory: %s", selected_entry);
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    }
+                    break;
+                case TAB:
+                    active_window = (active_window == DIRECTORY_WIN_ACTIVE) ? PREVIEW_WIN_ACTIVE : DIRECTORY_WIN_ACTIVE;
+                    // Reset preview_start_line when switching to directory window
+                    if (active_window == DIRECTORY_WIN_ACTIVE) {
+                        preview_start_line = 0;
+                    }
                     // Update notifwin
                     werase(notifwin);
-                    mvwprintw(notifwin, 0, 0, "Navigated to parent directory");
+                    mvwprintw(notifwin, 0, 0, "Switched to %s window", (active_window == DIRECTORY_WIN_ACTIVE) ? "Directory" : "Preview");
                     wrefresh(notifwin);
                     should_clear_notif = false;
-                }
-                break;
-            case KEY_RIGHT:
-                if (active_window == DIRECTORY_WIN_ACTIVE) {
-                    navigate_right(&current_directory, selected_entry, &files, &dir_window_cas);
-                    // Update notifwin
-                    werase(notifwin);
-                    mvwprintw(notifwin, 0, 0, "Entered directory: %s", selected_entry);
-                    wrefresh(notifwin);
-                    should_clear_notif = false;
-                }
-                break;
-            case TAB:
-                active_window = (active_window == DIRECTORY_WIN_ACTIVE) ? PREVIEW_WIN_ACTIVE : DIRECTORY_WIN_ACTIVE;
-                // Update notifwin
-                werase(notifwin);
-                mvwprintw(notifwin, 0, 0, "Switched to %s window", (active_window == DIRECTORY_WIN_ACTIVE) ? "Directory" : "Preview");
-                wrefresh(notifwin);
-                should_clear_notif = false;
-                break;
-            case CTRL_E:
-                if (active_window == PREVIEW_WIN_ACTIVE) {
-                    char file_path[MAX_PATH_LENGTH];
-                    path_join(file_path, current_directory, selected_entry);
-                    edit_file_in_terminal(previewwin, file_path, notifwin);
-                    // Update notifwin
-                    werase(notifwin);
-                    mvwprintw(notifwin, 0, 0, "Editing file: %s", selected_entry);
-                    wrefresh(notifwin);
-                    should_clear_notif = false;
-                }
-                break;
-            default:
-                break;
+                    break;
+                case CTRL_E:
+                    if (active_window == PREVIEW_WIN_ACTIVE) {
+                        char file_path[MAX_PATH_LENGTH];
+                        path_join(file_path, current_directory, selected_entry);
+                        edit_file_in_terminal(previewwin, file_path, notifwin);
+                        // After editing, reset preview_start_line
+                        preview_start_line = 0;
+                        // Update notifwin
+                        werase(notifwin);
+                        mvwprintw(notifwin, 0, 0, "Editing file: %s", selected_entry);
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    }
+                    break;
+                default:
+                    break;
             }
         }
 
@@ -461,9 +530,15 @@ int main() {
             wrefresh(notifwin);
         }
 
-        // Refresh the windows
-        draw_directory_window(dirwin, current_directory, (FileAttr *)&files.el[dir_window_cas.start], MIN(dir_window_cas.num_lines, dir_window_cas.num_files - dir_window_cas.start), dir_window_cas.cursor - dir_window_cas.start);
-        draw_preview_window(previewwin, current_directory, selected_entry);
+        // Refresh the windows with the updated preview_start_line
+        draw_directory_window(
+                dirwin,
+                current_directory,
+                (FileAttr *)&files.el[dir_window_cas.start],
+                MIN(dir_window_cas.num_lines, dir_window_cas.num_files - dir_window_cas.start),
+                dir_window_cas.cursor - dir_window_cas.start
+        );
+        draw_preview_window(previewwin, current_directory, selected_entry, preview_start_line);
 
         // Highlight the active window
         if (active_window == DIRECTORY_WIN_ACTIVE) {
