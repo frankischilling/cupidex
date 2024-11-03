@@ -6,6 +6,7 @@ CupidFM is a terminal-based file manager implemented in C, using the `ncurses` l
 
 - Navigate directories using arrow keys
 - View file details and preview supported file types
+- Display MIME types based on file content using `libmagic`
 - Command-line interface with basic file operations
 
 ## Prerequisites
@@ -15,6 +16,7 @@ To build and run CupidFM, you need the following dependencies installed:
 - `gcc` (GNU Compiler Collection)
 - `make` (build automation tool)
 - `ncurses` library for terminal handling
+- `libmagic` for MIME type detection based on file content
 
 ### Installing Dependencies on Ubuntu
 
@@ -22,7 +24,7 @@ Run the following command to install the necessary packages:
 
 ```bash
 sudo apt update
-sudo apt install build-essential libncurses-dev
+sudo apt install build-essential libncurses-dev libmagic-dev
 ```
 
 ## Building the Project
@@ -67,7 +69,7 @@ Use the arrow keys to navigate the directory structure:
 - **Left/Right**: Navigate to parent/child directories
 - **F1**: Exit the application
 - **TAB**: Change between preview and directory window
-  - **CONTROL+E**: While in the preview window you can edit within the file and save with
+  - **CONTROL+E**: While in the preview window, you can edit within the file
   - **CONTROL+S**: Save files you are editing within the terminal 
 
 ## Contributing
