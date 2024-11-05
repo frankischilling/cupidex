@@ -1,4 +1,6 @@
 // Must be signed
+#include <stdbool.h>
+
 #define SIZE int
 
 #define EDITOR_COMMAND "nano"  // Change this to your preferred default text editor
@@ -6,7 +8,7 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
-[[noreturn]]
+__attribute__((noreturn))
 void die(int r, const char *format, ...);
 
 void path_join(char *result, const char *path1, const char *path2);

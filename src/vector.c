@@ -17,7 +17,7 @@ Vector Vector_new(size_t cap) {
             .len = 0,
         }
     };
-    v.el[0] = nullptr;
+    v.el[0] = NULL;
     return v;
 }
 
@@ -36,7 +36,7 @@ void Vector_add(Vector *v, size_t add) {
 
 void Vector_set_len_no_free(Vector *v, size_t len) {
     v->IMPL.len = len;
-    v->el[len] = nullptr;
+    v->el[len] = NULL;
 }
 
 void Vector_set_len(Vector *v, size_t len) {
