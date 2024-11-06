@@ -14,7 +14,7 @@ CupidFM is a terminal-based file manager implemented in C, using the `ncurses` l
 - Write custom magic lib in house
 - on dir, give tree preview of inside
 - preview of zipped and tarred
-
+- syntax high lighting 
 ## Prerequisites
 
 To build and run CupidFM, you need the following dependencies installed:
