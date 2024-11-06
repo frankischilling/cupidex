@@ -269,11 +269,11 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int 
     getmaxyx(window, max_y, max_x);
 
     for (int i = 0; i < max_y - 2 && (start_line + i) < buffer->num_lines; i++) {
-        // Highlight the current line
+        const char *line = buffer->lines[start_line + i] ? buffer->lines[start_line + i] : ""; // Safely handle NULL
         if ((start_line + i) == cursor_line) {
             wattron(window, A_REVERSE);
         }
-        mvwprintw(window, i + 1, 2, "%.*s", max_x - 4, buffer->lines[start_line + i]);
+        mvwprintw(window, i + 1, 2, "%.*s", max_x - 4, line);
         if ((start_line + i) == cursor_line) {
             wattroff(window, A_REVERSE);
         }
@@ -311,19 +311,24 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
     init_text_buffer(&text_buffer);
 
     char line[256];
+    bool is_empty = true; // Track if the file is empty
 
     // Read the file content into the text buffer
     while (fgets(line, sizeof(line), file)) {
-        // Remove newline character
+        is_empty = false;
         line[strcspn(line, "\n")] = '\0';
 
-        // Resize buffer if needed
         if (text_buffer.num_lines >= text_buffer.capacity) {
             text_buffer.capacity *= 2;
             text_buffer.lines = realloc(text_buffer.lines, sizeof(char*) * text_buffer.capacity);
         }
 
         text_buffer.lines[text_buffer.num_lines++] = strdup(line);
+    }
+
+    // If the file is empty, add a single empty line for editing
+    if (is_empty) {
+        text_buffer.lines[text_buffer.num_lines++] = strdup("");
     }
 
     // Call render_text_buffer to display the initial content

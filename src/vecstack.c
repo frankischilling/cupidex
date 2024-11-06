@@ -14,7 +14,7 @@ void VecStack_push(VecStack *v, void *el) {
 }
 void *VecStack_pop(VecStack *v) {
     if (Vector_len(v->v) < 1)
-        return nullptr;
+        return NULL;
     void *r = v->v.el[Vector_len(v->v) - 1];
     Vector_set_len_no_free(&v->v, Vector_len(v->v) - 1);
     return r;
@@ -22,7 +22,7 @@ void *VecStack_pop(VecStack *v) {
 
 void *VecStack_peek(VecStack *v) {
     if (Vector_len(v->v) < 1)
-        return nullptr;
+        return NULL;
     return v->v.el[Vector_len(v->v) - 1];
 }
 
