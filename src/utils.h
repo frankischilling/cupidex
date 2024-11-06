@@ -11,7 +11,7 @@
 __attribute__((noreturn))
 void die(int r, const char *format, ...);
 
-void path_join(char *result, const char *path1, const char *path2);
+void path_join(char *result, const char *base, const char *extra);
 void create_file(const char *filename);
 void display_files(const char *directory);
 void preview_file(const char *filename);

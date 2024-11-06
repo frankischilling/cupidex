@@ -75,6 +75,9 @@ const char *FileAttr_get_name(FileAttr fa) {
 }
 
 bool FileAttr_is_dir(FileAttr fa) {
+    if (fa == NULL) {
+        return false; // Treat NULL as a non-directory
+    }
     return fa->is_dir;
 }
 
@@ -125,22 +128,19 @@ void append_files_to_vec(Vector *v, const char *name) {
     if (dir != NULL) {
         struct dirent *entry;
         while ((entry = readdir(dir)) != NULL) {
-            // Filter out "." and ".." entries
             if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char full_path[MAX_PATH_LENGTH];
                 path_join(full_path, name, entry->d_name);
 
                 bool is_dir = is_directory(name, entry->d_name);
 
-                // Allocate memory for the FileAttr object
                 FileAttr file_attr = mk_attr(entry->d_name, is_dir, entry->d_ino);
 
-                // Add the FileAttr object to the vector
-                Vector_add(v, 1);
-                v->el[Vector_len(*v)] = file_attr;
-
-                // Update the vector length
-                Vector_set_len(v, Vector_len(*v) + 1);
+                if (file_attr != NULL) {  // Only add if not NULL
+                    Vector_add(v, 1);
+                    v->el[Vector_len(*v)] = file_attr;
+                    Vector_set_len(v, Vector_len(*v) + 1);
+                }
             }
         }
         closedir(dir);

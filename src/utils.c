@@ -118,6 +118,6 @@ bool is_directory(const char *path, const char *filename) {
     if (stat(full_path, &path_stat) == 0)
         return S_ISDIR(path_stat.st_mode);
 
-    return true;
+    return false; // Correct: Do not assume it's a directory if stat fails
 }
 

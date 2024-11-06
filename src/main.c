@@ -19,7 +19,7 @@
 #include <files.h>
 #include "vecstack.h"
 
-#define MAX_PATH_LENGTH 256
+#define MAX_PATH_LENGTH 1024
 #define TAB 9
 #define CTRL_E 5
 
@@ -276,27 +276,23 @@ void fix_cursor(CursorAndSlice *cas) {
     cas->start = MAX(cas->start, cas->cursor + 1 - cas->num_lines);
 }
 
+// Remove this entire function from main.c
 void path_join(char *result, const char *base, const char *extra) {
     size_t base_len = strlen(base);
     size_t extra_len = strlen(extra);
 
     if (base_len == 0) {
-        // If the base is an empty string, copy the extra to the result
         strncpy(result, extra, MAX_PATH_LENGTH);
     } else if (extra_len == 0) {
-        // If the extra is an empty string, copy the base to the result
         strncpy(result, base, MAX_PATH_LENGTH);
     } else {
-        // Check if the base ends with a slash
         if (base[base_len - 1] == '/') {
-            // No need to skip the first character of 'extra'
             snprintf(result, MAX_PATH_LENGTH, "%s%s", base, extra);
         } else {
             snprintf(result, MAX_PATH_LENGTH, "%s/%s", base, extra);
         }
     }
 
-    // Ensure null-terminated
     result[MAX_PATH_LENGTH - 1] = '\0';
 }
 
@@ -310,14 +306,18 @@ void reload_directory(Vector *files, const char *current_directory) {
 }
 
 void navigate_up(CursorAndSlice *cas, const Vector *files, const char **selected_entry) {
-    cas->cursor -= 1;
-    fix_cursor(cas);
+    if (cas->num_files > 1) {
+        cas->cursor -= 1;
+        fix_cursor(cas);
+    }
     *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
 }
 
 void navigate_down(CursorAndSlice *cas, const Vector *files, const char **selected_entry) {
-    cas->cursor += 1;
-    fix_cursor(cas);
+    if (cas->num_files > 1) {
+        cas->cursor += 1;
+        fix_cursor(cas);
+    }
     *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
 }
 
@@ -350,60 +350,62 @@ void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_
 }
 
 // Function to navigate right
-void navigate_right(char **current_directory, const char *selected_entry, Vector *files, CursorAndSlice *dir_window_cas) {
-    // Check if the selected entry is a directory
+void navigate_right(AppState *state, char **current_directory, const char *selected_entry, Vector *files, CursorAndSlice *dir_window_cas) {
+    // Verify if the selected entry is a directory
     FileAttr current_file = files->el[dir_window_cas->cursor];
     if (!FileAttr_is_dir(current_file)) {
-        // Display a notification if it's not a directory
         werase(notifwin);
         mvwprintw(notifwin, 0, 0, "Selected entry is not a directory");
         wrefresh(notifwin);
         return;
     }
 
+    // Construct the new path carefully
     char new_path[MAX_PATH_LENGTH];
     path_join(new_path, *current_directory, selected_entry);
 
-    // Save the current cursor position
-    SIZE saved_cursor = dir_window_cas->cursor;
+    // Check if we’re not re-entering the same directory path
+    if (strcmp(new_path, *current_directory) == 0) {
+        werase(notifwin);
+        mvwprintw(notifwin, 0, 0, "Already in this directory");
+        wrefresh(notifwin);
+        return;
+    }
 
-    // Push the selected entry onto the stack
-    char* new_entry = strdup(selected_entry);
+    // Push the selected directory name onto the stack
+    char *new_entry = strdup(selected_entry);
     if (new_entry == NULL) {
-        mvprintw(LINES - 1, 1, "Memory allocation error");
-        refresh();
+        mvwprintw(notifwin, LINES - 1, 1, "Memory allocation error");
+        wrefresh(notifwin);
         return;
     }
     VecStack_push(&directoryStack, new_entry);
 
-    // Update the current directory and reload files
+    // Free the old directory and set to the new path
     free(*current_directory);
     *current_directory = strdup(new_path);
     if (*current_directory == NULL) {
-        mvprintw(LINES - 1, 1, "Memory allocation error");
-        refresh();
-        VecStack_pop(&directoryStack);  // Rollback stack operation
+        mvwprintw(notifwin, LINES - 1, 1, "Memory allocation error");
+        wrefresh(notifwin);
+        free(VecStack_pop(&directoryStack));  // Roll back the stack operation
         return;
     }
 
-    // Reload the directory's files
+    // Reload directory contents in the new path
     reload_directory(files, *current_directory);
 
-    // If the new directory is empty, notify and pop the last directory from the stack
-    if (Vector_len(*files) == 0) {
-        mvprintw(LINES - 1, 1, "Empty directory");
-        refresh();
-        VecStack_pop(&directoryStack);  // Rollback stack operation
-        return;
-    }
-
-    // Restore cursor and start positions
-    dir_window_cas->cursor = saved_cursor;
+    // Reset cursor and start position for the new directory
+    dir_window_cas->cursor = 0;
     dir_window_cas->start = 0;
     dir_window_cas->num_lines = LINES - 5;
     dir_window_cas->num_files = Vector_len(*files);
 
-    refresh();
+    // If there’s only one entry, automatically select it
+    if (Vector_len(*files) == 1) {
+        state->selected_entry = FileAttr_get_name(files->el[0]);
+    }
+
+    wrefresh(mainwin);
 }
 
 void handle_winch(int sig) {
@@ -587,11 +589,18 @@ int main() {
                         should_clear_notif = false;
                     }
                     break;
+                    // In the main loop after navigating right
                 case KEY_RIGHT:
                     if (active_window == DIRECTORY_WIN_ACTIVE) {
                         if (FileAttr_is_dir(state.files.el[state.dir_window_cas.cursor])) {
-                            navigate_right(&state.current_directory, state.selected_entry, &state.files, &state.dir_window_cas);
+                            navigate_right(&state, &state.current_directory, state.selected_entry, &state.files, &state.dir_window_cas);
                             state.preview_start_line = 0;
+
+                            // Automatically set selected_entry if there is only one option
+                            if (state.dir_window_cas.num_files == 1) {
+                                state.selected_entry = FileAttr_get_name(state.files.el[0]);
+                            }
+
                             werase(notifwin);
                             mvwprintw(notifwin, 0, 0, "Entered directory: %s", state.selected_entry);
                             wrefresh(notifwin);
