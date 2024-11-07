@@ -18,7 +18,7 @@
 // Local includes
 #include "utils.h"
 #include "vector.h"
-#include <files.h>
+#include "files.h"
 #include "vecstack.h"
 
 #define MAX_PATH_LENGTH 256 // 256
@@ -52,7 +52,15 @@ typedef struct {
     // Add more state variables here if needed
 } AppState;
 
-// Recursive function to display directory tree structure
+/** Function to show directory tree recursively
+ *
+ * @param window the window to display the directory tree
+ * @param dir_path the path of the directory to display
+ * @param level the current level of the directory tree
+ * @param line_num the current line number in the window
+ * @param max_y the maximum number of lines in the window
+ * @param max_x the maximum number of columns in the window
+ */
 void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *line_num, int max_y, int max_x) {
     // Check if the current line number exceeds the window's visible area
     if (*line_num >= max_y - 1) {
@@ -114,8 +122,10 @@ void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *l
     }
     closedir(dir);
 }
-
-// Function to update the stack when navigating left or right
+/** Function to update the directory stack with the new directory
+ *
+ * @param newDirectory the new directory to push onto the stack
+ */
 void updateDirectoryStack(const char *newDirectory) {
     char *token;
     char *copy = strdup(newDirectory);
@@ -127,12 +137,28 @@ void updateDirectoryStack(const char *newDirectory) {
 
     free(copy);
 }
-
+/** Function to draw the directory window
+ *
+ * @param window the window to draw the directory in
+ * @param directory the current directory
+ * @param files the list of files in the directory
+ * @param files_len the number of files in the directory
+ * @param selected_entry the index of the selected entry
+ */
 bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
 }
+/** Function to get the total number of lines in a file
+ *
+ * @param file_path the path to the file
+ * @return the total number of lines in the file
+ */
 
-// Helper function to count total lines in a file
+/** Function to get the total number of lines in a file
+ *
+ * @param file_path
+ * @return total_lines number of lines in the file
+ */
 int get_total_lines(const char *file_path) {
     FILE *file = fopen(file_path, "r");
     if (!file) return 0;
@@ -147,6 +173,14 @@ int get_total_lines(const char *file_path) {
     return total_lines;
 }
 // tab / clicking on the different windows will move the cursor to that window, will be used later for editing files
+/** Function to draw the directory window
+ *
+ * @param window the window to draw the directory in
+ * @param directory the current directory
+ * @param files the list of files in the directory
+ * @param files_len the number of files in the directory
+ * @param selected_entry the index of the selected entry
+ */
 void draw_directory_window(
         WINDOW *window,
         const char *directory,
@@ -200,7 +234,13 @@ void draw_directory_window(
 
     wrefresh(window);
 }
-
+/** Function to draw the preview window
+ *
+ * @param window the window to draw the preview in
+ * @param current_directory the current directory
+ * @param selected_entry the selected entry
+ * @param start_line the starting line of the preview
+ */
 void draw_preview_window(WINDOW *window, const char *current_directory, const char *selected_entry, int start_line) {
     // Clear the window and draw a border
     werase(window);
@@ -283,7 +323,10 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     // Refresh to show changes
     wrefresh(window);
 }
-
+/** Function to redraw all windows
+ *
+ * @param state the application state
+ */
 void redraw_all_windows(AppState *state) {
     // Update ncurses internal structures to reflect the new terminal size
     endwin();
@@ -342,7 +385,9 @@ void redraw_all_windows(AppState *state) {
             state->preview_start_line
     );
 }
-
+/** Function to handle cursor movement in the directory window
+ * @param cas the cursor and slice state
+ */
 void fix_cursor(CursorAndSlice *cas) {
     cas->cursor = MIN(cas->cursor, cas->num_files - 1);
     cas->cursor = MAX(0, cas->cursor);
@@ -350,27 +395,11 @@ void fix_cursor(CursorAndSlice *cas) {
     cas->start = MIN(cas->start, cas->cursor);
     cas->start = MAX(cas->start, cas->cursor + 1 - cas->num_lines);
 }
-
-// Remove this entire function from main.c
-void path_join(char *result, const char *base, const char *extra) {
-    size_t base_len = strlen(base);
-    size_t extra_len = strlen(extra);
-
-    if (base_len == 0) {
-        strncpy(result, extra, MAX_PATH_LENGTH);
-    } else if (extra_len == 0) {
-        strncpy(result, base, MAX_PATH_LENGTH);
-    } else {
-        if (base[base_len - 1] == '/') {
-            snprintf(result, MAX_PATH_LENGTH, "%s%s", base, extra);
-        } else {
-            snprintf(result, MAX_PATH_LENGTH, "%s/%s", base, extra);
-        }
-    }
-
-    result[MAX_PATH_LENGTH - 1] = '\0';
-}
-
+/** Function to reload the directory contents
+ *
+ * @param files the list of files
+ * @param current_directory the current directory
+ */
 void reload_directory(Vector *files, const char *current_directory) {
     // Empties the vector
     Vector_set_len(files, 0);
@@ -379,7 +408,12 @@ void reload_directory(Vector *files, const char *current_directory) {
     // Makes the vector shorter
     Vector_sane_cap(files);
 }
-
+/** Function to navigate up in the directory window
+ *
+ * @param cas the cursor and slice state
+ * @param files the list of files
+ * @param selected_entry the selected entry
+ */
 void navigate_up(CursorAndSlice *cas, const Vector *files, const char **selected_entry) {
     if (cas->num_files > 1) {
         cas->cursor -= 1;
@@ -387,7 +421,12 @@ void navigate_up(CursorAndSlice *cas, const Vector *files, const char **selected
     }
     *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
 }
-
+/** Function to navigate down in the directory window
+ *
+ * @param cas the cursor and slice state
+ * @param files the list of files
+ * @param selected_entry the selected entry
+ */
 void navigate_down(CursorAndSlice *cas, const Vector *files, const char **selected_entry) {
     if (cas->num_files > 1) {
         cas->cursor += 1;
@@ -395,7 +434,12 @@ void navigate_down(CursorAndSlice *cas, const Vector *files, const char **select
     }
     *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
 }
-
+/** Function to navigate left in the directory window
+ *
+ * @param current_directory the current directory
+ * @param files the list of files
+ * @param cas the cursor and slice state
+ */
 void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_window_cas) {
     // Check if the current directory is the root directory
     if (strcmp(*current_directory, "/") != 0) {
@@ -423,8 +467,14 @@ void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_
     dir_window_cas->num_lines = LINES - 5;
     dir_window_cas->num_files = Vector_len(*files);
 }
-
-// Function to navigate right
+/** Function to navigate right in the directory window
+ *
+ * @param state the application state
+ * @param current_directory the current directory
+ * @param selected_entry the selected entry
+ * @param files the list of files
+ * @param dir_window_cas the cursor and slice state
+ */
 void navigate_right(AppState *state, char **current_directory, const char *selected_entry, Vector *files, CursorAndSlice *dir_window_cas) {
     // Verify if the selected entry is a directory
     FileAttr current_file = files->el[dir_window_cas->cursor];
@@ -482,8 +532,12 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
 
     wrefresh(mainwin);
 }
-
+/** Function to handle terminal window resize
+ *
+ * @param sig the signal number
+ */
 void handle_winch(int sig) {
+    // in reference to not understanding my code at all
     (void)sig;  // Suppress unused parameter warning
     resized = 1;
     // Reinitialize the screen to update LINES and COLS
@@ -520,10 +574,11 @@ void handle_winch(int sig) {
     box(previewwin, 0, 0);
     wrefresh(previewwin);
 }
-
-// TODO: make it adapt itself when the screen gets resized
-// TODO: make a bottom win to show error messages, current commands, and keybinds being used
-// TODO: fix when resize the files go over the border
+/** Function to handle cleanup and exit
+ *
+ * @param r the exit code
+ * @param format the error message format
+ */
 int main() {
     // Initialize ncurses
     initscr();

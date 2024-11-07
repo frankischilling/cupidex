@@ -10,9 +10,6 @@
 #include <stdio.h>                 // for snprintf
 #include <sys/stat.h>              // for struct stat, lstat, S_ISDIR
 #include <time.h>                  // for strftime
-#include <main.h>                  // for FileAttr, Vector, Vector_add, Vector_len, Vector_set_len
-#include <utils.h>                 // for path_join, is_directory
-#include <files.h>                 // for FileAttributes, FileAttr, MAX_PATH_LENGTH
 #include <curses.h>                // for WINDOW, mvwprintw
 #include <stdbool.h>               // for bool, true, false
 #include <string.h>                // for strcmp
@@ -20,23 +17,28 @@
 #include <fcntl.h>                 // For O_RDONLY
 #include <magic.h>                 // For libmagic
 
+// Local includes
+#include "main.h"                  // for FileAttr, Vector, Vector_add, Vector_len, Vector_set_len
+#include "utils.h"                 // for path_join, is_directory
+#include "files.h"                 // for FileAttributes, FileAttr, MAX_PATH_LENGTH
+
 #define MAX_PATH_LENGTH 1024
 #define MIN_INT_SIZE_T(x, y) (((size_t)(x) > (y)) ? (y) : (x))
 
 // Supported MIME types
 const char *supported_mime_types[] = {
-        "text/plain",
-        "text/x-c",
-        "application/json",
-        "application/xml",
-        "text/x-shellscript",
-        "text/x-python",
-        "text/x-java-source",
-        "text/html",
-        "text/css",
-        "text/x-c++src",
-        "application/x-yaml",
-        "application/x-sh",     // Shell scripts
+        "text/plain",             // Plain text files
+        "text/x-c",               // C source files
+        "application/json",       // JSON files
+        "application/xml",        // XML files
+        "text/x-shellscript",     // Shell scripts
+        "text/x-python",          // Python source files
+        "text/x-java-source",     // Java source files
+        "text/html",              // HTML files
+        "text/css",               // CSS files
+        "text/x-c++src",          // C++ source files
+        "application/x-yaml",    // YAML files
+        "application/x-sh",      // Shell scripts
         "application/x-perl",    // Perl scripts
         "application/x-php",     // PHP scripts
         "text/x-rustsrc",        // Rust source files
@@ -46,25 +48,33 @@ const char *supported_mime_types[] = {
 };
 
 size_t num_supported_mime_types = sizeof(supported_mime_types) / sizeof(supported_mime_types[0]);
-
+// FileAttributes structure
 struct FileAttributes {
-    char *name;  // Change from char name*;
-    ino_t inode;
+    char *name;  //
+    ino_t inode; // Change from int inode;
     bool is_dir;
 };
-
+// TextBuffer structure
 typedef struct {
     char **lines;      // Dynamic array of strings
     int num_lines;     // Current number of lines
     int capacity;      // Total capacity of the array
 } TextBuffer;
-
+/**
+ * Function to initialize a TextBuffer
+ *
+ * @param buffer the TextBuffer to initialize
+ */
 void init_text_buffer(TextBuffer *buffer) {
     buffer->capacity = 100; // Initial capacity
     buffer->num_lines = 0;
     buffer->lines = malloc(sizeof(char*) * buffer->capacity);
 }
-
+/**
+ * Function to free the memory allocated for a TextBuffer
+ *
+ * @param buffer the TextBuffer to free
+ */
 const char *FileAttr_get_name(FileAttr fa) {
     if (fa != NULL) {
         return fa->name;
@@ -73,14 +83,25 @@ const char *FileAttr_get_name(FileAttr fa) {
         return "Unknown";
     }
 }
-
+/**
+ * Function to check if a file type is supported for preview
+ *
+ * @param filename the name of the file
+ * @return true if the file type is supported, false otherwise
+ */
 bool FileAttr_is_dir(FileAttr fa) {
     if (fa == NULL) {
         return false; // Treat NULL as a non-directory
     }
     return fa->is_dir;
 }
-
+/**
+ * Function to format a file size in a human-readable format
+ *
+ * @param buffer the buffer to store the formatted file size
+ * @param size the size of the file
+ * @return the formatted file size
+ */
 char* format_file_size(char *buffer, size_t size) {
     // iB for multiples of 1024, B for multiples of 1000
     // so, KiB = 1024, KB = 1000
@@ -94,7 +115,14 @@ char* format_file_size(char *buffer, size_t size) {
     sprintf(buffer, "%.2f %s", fileSize, units[i]);
     return buffer;
 }
-
+/**
+ * Function to create a new FileAttr
+ *
+ * @param name the name of the file
+ * @param is_dir true if the file is a directory, false otherwise
+ * @param inode the inode number of the file
+ * @return a new FileAttr
+ */
 FileAttr mk_attr(const char *name, bool is_dir, ino_t inode) {
     FileAttr fa = malloc(sizeof(struct FileAttributes));
 
@@ -115,14 +143,19 @@ FileAttr mk_attr(const char *name, bool is_dir, ino_t inode) {
         return NULL;
     }
 }
-
+// Function to free the allocated memory for a FileAttr
 void free_attr(FileAttr fa) {
     if (fa != NULL) {
         free(fa->name);  // Free the allocated memory for the name
         free(fa);
     }
 }
-
+/**
+ * Function to append files in a directory to a Vector
+ *
+ * @param v the Vector to append the files to
+ * @param name the name of the directory
+ */
 void append_files_to_vec(Vector *v, const char *name) {
     DIR *dir = opendir(name);
     if (dir != NULL) {
@@ -191,7 +224,13 @@ long get_directory_size(const char *dir_path) {
     closedir(dir);
     return total_size;
 }
-// Function to display file information
+/**
+ * Function to display file information in a window
+ *
+ * @param window the window to display the file information
+ * @param file_path the path to the file
+ * @param max_x the maximum width of the window
+ */
 void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     struct stat file_stat;
 
@@ -260,7 +299,12 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     }
     magic_close(magic_cookie);
 }
-
+/**
+ * Function to check if a file type is supported for preview
+ *
+ * @param filename the name of the file
+ * @return true if the file type is supported, false otherwise
+ */
 void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int cursor_line, int cursor_col) {
     werase(window);
     box(window, 0, 0);
@@ -283,7 +327,13 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int 
     wmove(window, cursor_line - start_line + 1, cursor_col + 2);
     wrefresh(window);
 }
-
+/**
+ * Function to edit a file in the terminal using a text buffer
+ *
+ * @param window the window to display the file content
+ * @param file_path the path to the file to edit
+ * @param notifwin the window to display notifications
+ */
 void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifwin) {
     int fd = open(file_path, O_RDWR | O_CREAT, 0644);
     if (fd == -1) {
