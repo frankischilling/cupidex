@@ -11,12 +11,14 @@ CupidFM is a terminal-based file manager implemented in C, using the `ncurses` l
 
 ## Todo
 
-- Write custom magic lib in house
-- on dir, give tree preview of inside - WIP
-  - implement scrolling of tree preview    
-- preview of zipped and tarred
-- syntax high-lighting
-- handle symbolic links with the correct display of them (arrows -> pointing to the where it links to)
+- [ ] Write custom magic library for in-house MIME type detection
+- [X] Implement directory tree preview for directories
+  - [ ] Enable scrolling for tree preview in the preview window
+- [ ] Add preview support for `.zip` and `.tar` files
+- [ ] Implement syntax highlighting for supported file types
+- [ ] Display symbolic links with correct arrow notation (e.g., `->` showing the target path)
+- [ ] Push to main branch
+      
 ## Prerequisites
 
 To build and run CupidFM, you need the following dependencies installed:
