@@ -1,4 +1,4 @@
-# CupidFM
+# CupidFM - file editing
 
 CupidFM is a terminal-based file manager implemented in C, using the `ncurses` library for the user interface. It provides features like directory navigation, file preview, and displaying file information.
 
