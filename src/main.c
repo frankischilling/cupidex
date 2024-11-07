@@ -13,13 +13,15 @@
 #include <signal.h>    // for signal, SIGWINCH
 #include <stdbool.h>   // for bool, true, false
 #include <string.h> // For memset
+#include <magic.h> // For libmagic
+#include <time.h> // For strftime
 // Local includes
 #include "utils.h"
 #include "vector.h"
 #include <files.h>
 #include "vecstack.h"
 
-#define MAX_PATH_LENGTH 1024
+#define MAX_PATH_LENGTH 256 // 256
 #define TAB 9
 #define CTRL_E 5
 
@@ -49,6 +51,69 @@ typedef struct {
     int preview_start_line;
     // Add more state variables here if needed
 } AppState;
+
+// Recursive function to display directory tree structure
+void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *line_num, int max_y, int max_x) {
+    // Check if the current line number exceeds the window's visible area
+    if (*line_num >= max_y - 1) {
+        mvwprintw(window, *line_num, 2, "...");
+        return;
+    }
+
+    DIR *dir = opendir(dir_path);
+    if (!dir) return;
+
+    struct dirent *entry;
+    struct stat statbuf;
+    char full_path[MAX_PATH_LENGTH];
+    char truncated_path[MAX_PATH_LENGTH];
+    bool truncated = false; // Flag to indicate path truncation
+
+    // Iterate through directory entries
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip "." and ".." entries
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+
+        // Construct full path
+        int result = snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+        if (result < 0 || result >= (int)sizeof(full_path)) {
+            truncated = true;
+            // Use a separate buffer for the truncated path
+            snprintf(truncated_path, sizeof(truncated_path), "%.*s...", MAX_PATH_LENGTH - 4, full_path);
+        } else {
+            truncated = false;
+            strncpy(truncated_path, full_path, sizeof(truncated_path) - 1);
+            truncated_path[sizeof(truncated_path) - 1] = '\0';
+        }
+
+        // Retrieve file stats
+        if (lstat(full_path, &statbuf) == -1) continue;
+
+        // Display the entry name with indentation and truncation indicator
+        if (*line_num < max_y - 1) {
+            const char *display_name = truncated ? "[Path too long]" : entry->d_name;
+            mvwprintw(window, (*line_num)++, 2 + level * 2, "%.*s", max_x - 4 - level * 2, display_name);
+
+            // Display additional directory information
+            if (S_ISDIR(statbuf.st_mode)) {
+                wattron(window, A_BOLD); // Highlight directories
+                mvwprintw(window, *line_num - 1, 2 + level * 2 + strlen(display_name), " [DIR]");
+                wattroff(window, A_BOLD);
+            }
+
+            // Optionally add more details (size, permissions, etc.)
+            char perm[10];
+            snprintf(perm, sizeof(perm), "%o", statbuf.st_mode & 0777);
+            mvwprintw(window, *line_num - 1, max_x - 10, "%s", perm); // Permissions display
+        }
+
+        // Recursively list directories
+        if (S_ISDIR(statbuf.st_mode)) {
+            show_directory_tree(window, truncated_path, level + 1, line_num, max_y, max_x);
+        }
+    }
+    closedir(dir);
+}
 
 // Function to update the stack when navigating left or right
 void updateDirectoryStack(const char *newDirectory) {
@@ -137,75 +202,85 @@ void draw_directory_window(
 }
 
 void draw_preview_window(WINDOW *window, const char *current_directory, const char *selected_entry, int start_line) {
-    // Clear the window
+    // Clear the window and draw a border
     werase(window);
-
-    // Draw a border around the window
     box(window, 0, 0);
 
-    // Get the window's dimensions
+    // Get window dimensions
     int max_x, max_y;
     getmaxyx(window, max_y, max_x);
 
     // Display the selected entry path
     char file_path[MAX_PATH_LENGTH];
     path_join(file_path, current_directory, selected_entry);
-    mvwprintw(window, 0, 2, "Selected Entry: %.*s", max_x - 4, file_path); // Use max_x instead of COLS
+    mvwprintw(window, 0, 2, "Selected Entry: %.*s", max_x - 4, file_path);
 
-    // Display file info
-    display_file_info(window, file_path, max_x);
+    // Attempt to retrieve file information
+    struct stat file_stat;
+    if (stat(file_path, &file_stat) == -1) {
+        mvwprintw(window, 2, 2, "Unable to retrieve file information");
+        return;
+    }
 
-    // Initialize line number to start after file info to prevent overlap
-    int line_num = 6; // Changed from 5 to 6
+    // Display file size
+    char fileSizeStr[20];
+    format_file_size(fileSizeStr, file_stat.st_size);
+    mvwprintw(window, 2, 2, "File Size: %s", fileSizeStr);
 
-    // Check if the selected entry is a supported file type
-    if (is_supported_file_type(file_path)) {
+    // Display file permissions
+    char permissions[10];
+    snprintf(permissions, sizeof(permissions), "%o", file_stat.st_mode & 0777);
+    mvwprintw(window, 3, 2, "Permissions: %s", permissions);
+
+    // Display last modification time
+    char modTime[50];
+    strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
+    mvwprintw(window, 4, 2, "Last Modified: %s", modTime);
+
+    // Display MIME type using libmagic
+    magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
+    if (magic_cookie != NULL && magic_load(magic_cookie, NULL) == 0) {
+        const char *mime_type = magic_file(magic_cookie, file_path);
+        mvwprintw(window, 5, 2, "MIME Type: %s", mime_type ? mime_type : "Unknown");
+        magic_close(magic_cookie);
+    } else {
+        mvwprintw(window, 5, 2, "MIME Type: Unable to detect");
+    }
+
+    // If the file is a directory, display the directory contents
+    if (S_ISDIR(file_stat.st_mode)) {
+        int line_num = 7;
+        show_directory_tree(window, file_path, 0, &line_num, max_y, max_x);
+    } else if (is_supported_file_type(file_path)) {
+        // Display file preview for supported types
         FILE *file = fopen(file_path, "r");
         if (file) {
             char line[256];
+            int line_num = 7;
             int current_line = 0;
-            int lines_displayed = 0;
-
-            // Add a blank line before the file content if space permits
-            if (line_num < max_y - 1) {
-                mvwprintw(window, line_num++, 2, " ");
-            }
 
             // Skip lines until start_line
             while (current_line < start_line && fgets(line, sizeof(line), file)) {
                 current_line++;
             }
 
-            // Display the file content starting from start_line
-            while (fgets(line, sizeof(line), file) && line_num < max_y - 1) { // Changed to max_y -1
-                // Remove newline character to prevent unexpected behavior
-                line[strcspn(line, "\n")] = '\0';
-
-                // Ensure the line doesn't exceed the window's width
+            // Display file content from start_line onward
+            while (fgets(line, sizeof(line), file) && line_num < max_y - 1) {
+                line[strcspn(line, "\n")] = '\0'; // Remove newline character
                 mvwprintw(window, line_num++, 2, "%.*s", max_x - 4, line);
-                lines_displayed++;
-            }
-
-            // Add a blank line after the file content if space permits
-            if (line_num < max_y - 1) {
-                mvwprintw(window, line_num++, 2, " ");
             }
 
             fclose(file);
 
-            // If no lines were displayed, inform the user
-            if (lines_displayed == 0 && line_num < max_y - 1) {
+            if (line_num < max_y - 1) {
                 mvwprintw(window, line_num++, 2, "End of file");
             }
         } else {
-            // Ensure we don't write outside the window
-            if (line_num < max_y - 1) {
-                mvwprintw(window, line_num++, 2, "Unable to open file for preview");
-            }
+            mvwprintw(window, 7, 2, "Unable to open file for preview");
         }
     }
 
-    // Refresh the window
+    // Refresh to show changes
     wrefresh(window);
 }
 

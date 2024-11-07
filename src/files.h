@@ -12,3 +12,4 @@ void append_files_to_vec(Vector *v, const char *name);
 void display_file_info(WINDOW *window, const char *file_path, int max_x);
 bool is_supported_file_type(const char *filename);
 void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifwin);
+char* format_file_size(char *buffer, size_t size);
