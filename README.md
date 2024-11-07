@@ -15,7 +15,8 @@ CupidFM is a terminal-based file manager implemented in C, using the `ncurses` l
 - on dir, give tree preview of inside - WIP
   - implement scrolling of tree preview    
 - preview of zipped and tarred
-- syntax high lighting 
+- syntax high-lighting
+- handle symbolic links with the correct display of them (arrows -> pointing to the where it links to)
 ## Prerequisites
 
 To build and run CupidFM, you need the following dependencies installed:
