@@ -20,7 +20,8 @@ CupidFM is a terminal-based file manager implemented in C, using the `ncurses` l
 - [ ] Display symbolic links with correct arrow notation (e.g., `->` showing the target path)
 - [ ] Fix being able to enter directory before calculation is done causing a empty directory and a broken file path
 - [ ] Add text display on tree preview when user enters a empty dir
-- [ ] Fix dir window scrolling up and down when you hit the bottom or top it brings you to either side 
+- [ ] Fix dir window scrolling up and down when you hit the bottom or top it brings you to either side
+- [ ] Add build ver, and name somewhere
 - [ ] Push to main branch
       
 ## Prerequisites
