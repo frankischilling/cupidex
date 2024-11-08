@@ -25,6 +25,9 @@
 #define TAB 9
 #define CTRL_E 5
 
+#define BANNER_TEXT "  CupidFM - Terminal File Manager  "
+#define BUILD_INFO "  Build: 2024-11-08  "
+
 // Global resize flag
 volatile sig_atomic_t resized = 0;
 
@@ -33,6 +36,7 @@ WINDOW *notifwin;
 WINDOW *mainwin;
 WINDOW *dirwin;
 WINDOW *previewwin;
+WINDOW *bannerwin;
 
 VecStack directoryStack;
 
@@ -337,12 +341,12 @@ void redraw_all_windows(AppState *state) {
     int new_cols = COLS;
     int new_lines = LINES;
 
-    // Resize main window
-    wresize(mainwin, new_lines - 1, new_cols);
-    mvwin(mainwin, 0, 0);
-    werase(mainwin);
-    box(mainwin, 0, 0);
-    wrefresh(mainwin);
+    // Resize banner window
+    wresize(bannerwin, 3, new_cols);
+    mvwin(bannerwin, 0, 0);
+    werase(bannerwin);
+    box(bannerwin, 0, 0);
+    wrefresh(bannerwin);
 
     // Resize notifwin
     wresize(notifwin, 1, new_cols);
@@ -351,20 +355,27 @@ void redraw_all_windows(AppState *state) {
     box(notifwin, 0, 0);
     wrefresh(notifwin);
 
-    // Calculate new widths
+    // Resize main window
+    wresize(mainwin, new_lines - 4, new_cols); // 3 for banner + 1 for notifwin
+    mvwin(mainwin, 3, 0);
+    werase(mainwin);
+    box(mainwin, 0, 0);
+    wrefresh(mainwin);
+
+    // Recalculate new widths
     SIZE dir_win_width = new_cols / 2;
     SIZE preview_win_width = new_cols - dir_win_width;
 
     // Resize and move dirwin
-    wresize(dirwin, new_lines - 1, dir_win_width);
-    mvwin(dirwin, 0, 0);
+    wresize(dirwin, new_lines - 4, dir_win_width);
+    mvwin(dirwin, 3, 0);
     werase(dirwin);
     box(dirwin, 0, 0);
     wrefresh(dirwin);
 
     // Resize and move previewwin
-    wresize(previewwin, new_lines - 1, preview_win_width);
-    mvwin(previewwin, 0, dir_win_width);
+    wresize(previewwin, new_lines - 4, preview_win_width);
+    mvwin(previewwin, 3, dir_win_width);
     werase(previewwin);
     box(previewwin, 0, 0);
     wrefresh(previewwin);
@@ -574,6 +585,47 @@ void handle_winch(int sig) {
     box(previewwin, 0, 0);
     wrefresh(previewwin);
 }
+/**
+ * Function to draw and scroll the banner text
+ *
+ * @param window the banner window
+ * @param text the text to scroll
+ * @param build_info the build information to display
+ * @param offset the current offset for scrolling
+ */
+void draw_scrolling_banner(WINDOW *window, const char *text, const char *build_info, int offset) {
+    int width = COLS; // Width of the banner window
+    int text_len = strlen(text);
+    int build_len = strlen(build_info);
+
+    // Calculate total length including padding before and after the text
+    int total_len = 2 * width + text_len + build_len + 2; // +2 for the spaces between text and build_info
+
+    // Create the scroll text buffer
+    char *scroll_text = malloc(total_len + 1); // +1 for null terminator
+    if (!scroll_text) return;
+
+    // Initialize the buffer with spaces
+    memset(scroll_text, ' ', total_len);
+    scroll_text[total_len] = '\0'; // Null-terminate the string
+
+    // Insert the text and build_info into the buffer
+    memcpy(scroll_text + width, text, text_len);
+    memcpy(scroll_text + width + text_len, "  ", 2); // Two spaces between text and build_info
+    memcpy(scroll_text + width + text_len + 2, build_info, build_len);
+
+    // Adjust offset to wrap around total_len
+    offset = offset % total_len;
+
+    // Display the portion of the scroll text that fits within the banner window
+    werase(window);
+    mvwprintw(window, 1, 1, "%.*s", width, scroll_text + offset);
+    wrefresh(window);
+
+    free(scroll_text);
+}
+
+
 /** Function to handle cleanup and exit
  *
  * @param r the exit code
@@ -588,25 +640,45 @@ int main() {
     curs_set(0);
     timeout(100);
 
-    // Initialize windows
+    // Initialize  notif windows
     notifwin = newwin(1, COLS, LINES - 1, 0);
     werase(notifwin);
     box(notifwin, 0, 0);
     wrefresh(notifwin);
 
+	// init main window
     mainwin = newwin(LINES - 1, COLS, 0, 0);
     wtimeout(mainwin, 100);
 
-    SIZE dir_win_width = COLS / 2;
-    SIZE preview_win_width = COLS - dir_win_width;
+ 	// Initialize banner window
+    int banner_height = 3; // Height of the banner window
+    bannerwin = newwin(banner_height, COLS, 0, 0);
+    wbkgd(bannerwin, COLOR_PAIR(1)); // Set background color
+    box(bannerwin, 0, 0);
+    wrefresh(bannerwin);
 
-    dirwin = subwin(mainwin, LINES - 1, dir_win_width, 0, 0);
-    box(dirwin, 0, 0);
-    wrefresh(dirwin);
+	// Initialize notifwin below the banner
+	int notif_height = 1;
+	notifwin = newwin(notif_height, COLS, banner_height + LINES - 1 - notif_height, 0);
+	werase(notifwin);
+	box(notifwin, 0, 0);
+	wrefresh(notifwin);
 
-    previewwin = subwin(mainwin, LINES - 1, preview_win_width, 0, dir_win_width);
-    box(previewwin, 0, 0);
-    wrefresh(previewwin);
+	// Initialize main window below the banner and above notifwin
+	mainwin = newwin(LINES - banner_height - notif_height, COLS, banner_height, 0);
+	wtimeout(mainwin, 100);
+
+	// Initialize subwindows
+	SIZE dir_win_width = COLS / 2;
+	SIZE preview_win_width = COLS - dir_win_width;
+
+	dirwin = subwin(mainwin, LINES - banner_height - notif_height, dir_win_width, banner_height, 0);
+	box(dirwin, 0, 0);
+	wrefresh(dirwin);
+
+	previewwin = subwin(mainwin, LINES - banner_height - notif_height, preview_win_width, banner_height, dir_win_width);
+	box(previewwin, 0, 0);
+	wrefresh(previewwin);
 
     // Set up signal handler for window resize
     struct sigaction sa;
@@ -648,12 +720,26 @@ int main() {
     // Initial drawing
     redraw_all_windows(&state);
 
-    int ch;
+	// Set a separate timeout for mainwin to handle scrolling
+	wtimeout(mainwin, 50); // Adjust as needed
+
+    // Initialize scrolling variables
+    int banner_offset = 0;
+    int banner_speed = 100; // in milliseconds
+
+	// Calculate the total scroll length for the banner
+	int total_scroll_length = 2 * COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 2; // +2 for spaces
+
+	int ch;
     while ((ch = getch()) != KEY_F(1)) {
         if (resized) {
             redraw_all_windows(&state);
             resized = 0;
         }
+
+ 		// Update banner offset and handle scrolling
+    	banner_offset = (banner_offset + 1) % total_scroll_length;
+    	draw_scrolling_banner(bannerwin, BANNER_TEXT, BUILD_INFO, banner_offset);
 
         bool should_clear_notif = true;
         if (ch != ERR) {
@@ -769,6 +855,9 @@ int main() {
                     break;
             }
         }
+
+		// Sleep or delay to control scrolling speed
+    	usleep(banner_speed * 1000);
 
         // Clear notification window only if no new notification was displayed
         if (should_clear_notif) {
