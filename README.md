@@ -16,9 +16,11 @@ CupidFM is a terminal-based file manager implemented in C, using the `ncurses` l
   - [ ] Enable scrolling for tree preview in the preview window
 - [ ] Add preview support for `.zip` and `.tar` files
 - [ ] Implement syntax highlighting for supported file types
+- [ ] In text editing buffer implement short cuts like, shift arrow to select shift control arrows to select faster etc.
 - [ ] Display symbolic links with correct arrow notation (e.g., `->` showing the target path)
 - [ ] Fix being able to enter directory before calculation is done causing a empty directory and a broken file path
 - [ ] Add text display on tree preview when user enters a empty dir
+- [ ] Fix dir window scrolling up and down when you hit the bottom or top it brings you to either side 
 - [ ] Push to main branch
       
 ## Prerequisites
