@@ -12,9 +12,11 @@
 #include <string.h>    // for strlen, strcpy, strdup, strrchr, strtok, strncmp
 #include <signal.h>    // for signal, SIGWINCH
 #include <stdbool.h>   // for bool, true, false
-#include <string.h> // For memset
-#include <magic.h> // For libmagic
-#include <time.h> // For strftime
+#include <string.h>    // For memset
+#include <magic.h>     // For libmagic
+#include <time.h>      // For strftime
+#include <sys/ioctl.h> // For ioctl
+#include <termios.h>   // For resize_term
 // Local includes
 #include "utils.h"
 #include "vector.h"
@@ -26,7 +28,7 @@
 #define CTRL_E 5
 
 #define BANNER_TEXT "  CupidFM - Terminal File Manager  "
-#define BUILD_INFO "  Build: 2024-11-10  "
+#define BUILD_INFO "  Build: 2024-11-08  "
 
 // Global resize flag
 volatile sig_atomic_t resized = 0;
@@ -327,75 +329,6 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     // Refresh to show changes
     wrefresh(window);
 }
-/** Function to redraw all windows
- *
- * @param state the application state
- */
-void redraw_all_windows(AppState *state) {
-    // Update ncurses internal structures to reflect the new terminal size
-    endwin();
-    refresh();
-    clear();
-
-    // Recalculate window dimensions based on new LINES and COLS
-    int new_cols = COLS;
-    int new_lines = LINES;
-
-    // Resize banner window
-    wresize(bannerwin, 3, new_cols);
-    mvwin(bannerwin, 0, 0);
-    werase(bannerwin);
-    box(bannerwin, 0, 0);
-    wrefresh(bannerwin);
-
-    // Resize notifwin
-    wresize(notifwin, 1, new_cols);
-    mvwin(notifwin, new_lines - 1, 0);
-    werase(notifwin);
-    box(notifwin, 0, 0);
-    wrefresh(notifwin);
-
-    // Resize main window
-    wresize(mainwin, new_lines - 4, new_cols); // 3 for banner + 1 for notifwin
-    mvwin(mainwin, 3, 0);
-    werase(mainwin);
-    box(mainwin, 0, 0);
-    wrefresh(mainwin);
-
-    // Recalculate new widths
-    SIZE dir_win_width = new_cols / 2;
-    SIZE preview_win_width = new_cols - dir_win_width;
-
-    // Resize and move dirwin
-    wresize(dirwin, new_lines - 4, dir_win_width);
-    mvwin(dirwin, 3, 0);
-    werase(dirwin);
-    box(dirwin, 0, 0);
-    wrefresh(dirwin);
-
-    // Resize and move previewwin
-    wresize(previewwin, new_lines - 4, preview_win_width);
-    mvwin(previewwin, 3, dir_win_width);
-    werase(previewwin);
-    box(previewwin, 0, 0);
-    wrefresh(previewwin);
-
-    // Redraw directory and preview contents
-    draw_directory_window(
-            dirwin,
-            state->current_directory,
-            (FileAttr *)&state->files.el[state->dir_window_cas.start],
-            MIN(state->dir_window_cas.num_lines, state->dir_window_cas.num_files - state->dir_window_cas.start),
-            state->dir_window_cas.cursor - state->dir_window_cas.start
-    );
-
-    draw_preview_window(
-            previewwin,
-            state->current_directory,
-            state->selected_entry,
-            state->preview_start_line
-    );
-}
 /** Function to handle cursor movement in the directory window
  * @param cas the cursor and slice state
  */
@@ -406,6 +339,91 @@ void fix_cursor(CursorAndSlice *cas) {
     cas->start = MIN(cas->start, cas->cursor);
     cas->start = MAX(cas->start, cas->cursor + 1 - cas->num_lines);
 }
+/** Function to redraw all windows
+ *
+ * @param state the application state
+ */
+void redraw_all_windows(AppState *state) {
+    // Get new terminal dimensions
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    resize_term(w.ws_row, w.ws_col);
+
+    // Update ncurses internal structures
+    endwin();
+    refresh();
+    clear();
+
+    // Recalculate window dimensions with minimum sizes
+    int new_cols = MAX(COLS, 40);  // Minimum width of 40 columns
+    int new_lines = MAX(LINES, 10); // Minimum height of 10 lines
+    int banner_height = 3;
+    int notif_height = 1;
+    int main_height = new_lines - banner_height - notif_height;
+
+    // Calculate subwindow dimensions with minimum sizes
+    SIZE dir_win_width = MAX(new_cols / 3, 20);  // Minimum directory window width
+    SIZE preview_win_width = new_cols - dir_win_width - 2; // Account for borders
+
+    // Delete all windows first
+    if (dirwin) delwin(dirwin);
+    if (previewwin) delwin(previewwin);
+    if (mainwin) delwin(mainwin);
+    if (bannerwin) delwin(bannerwin);
+    if (notifwin) delwin(notifwin);
+
+    // Recreate all windows in order
+    bannerwin = newwin(banner_height, new_cols, 0, 0);
+    box(bannerwin, 0, 0);
+
+    mainwin = newwin(main_height, new_cols, banner_height, 0);
+    box(mainwin, 0, 0);
+
+    // Create subwindows with proper border accounting
+    int inner_height = main_height - 2;  // Account for main window borders
+    int inner_start_y = 1;               // Start after main window's top border
+    int dir_start_x = 1;                 // Start after main window's left border
+    int preview_start_x = dir_win_width + 1; // Start after directory window
+
+    dirwin = derwin(mainwin, inner_height, dir_win_width - 1, inner_start_y, dir_start_x);
+    previewwin = derwin(mainwin, inner_height, preview_win_width, inner_start_y, preview_start_x);
+
+    notifwin = newwin(notif_height, new_cols, new_lines - notif_height, 0);
+    box(notifwin, 0, 0);
+
+    // Update cursor and slice state
+    state->dir_window_cas.num_lines = inner_height;
+    fix_cursor(&state->dir_window_cas);
+
+    // Draw borders for subwindows
+    box(dirwin, 0, 0);
+    box(previewwin, 0, 0);
+
+    // Redraw content
+    draw_directory_window(
+        dirwin,
+        state->current_directory,
+        (FileAttr *)&state->files.el[state->dir_window_cas.start],
+        MIN(state->dir_window_cas.num_lines, state->dir_window_cas.num_files - state->dir_window_cas.start),
+        state->dir_window_cas.cursor - state->dir_window_cas.start
+    );
+
+    draw_preview_window(
+        previewwin,
+        state->current_directory,
+        state->selected_entry,
+        state->preview_start_line
+    );
+
+    // Refresh all windows in correct order
+    refresh();
+    wrefresh(bannerwin);
+    wrefresh(mainwin);
+    wrefresh(dirwin);
+    wrefresh(previewwin);
+    wrefresh(notifwin);
+}
+
 /** Function to reload the directory contents
  *
  * @param files the list of files
@@ -548,42 +566,8 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
  * @param sig the signal number
  */
 void handle_winch(int sig) {
-    // in reference to not understanding my code at all
     (void)sig;  // Suppress unused parameter warning
     resized = 1;
-    // Reinitialize the screen to update LINES and COLS
-    endwin();
-    refresh();
-    clear();
-
-    // Adjust notifwin position and size
-    wresize(notifwin, 1, COLS);
-    mvwin(notifwin, LINES - 1, 0);
-    wclear(notifwin);
-    box(notifwin, 0, 0);
-    wrefresh(notifwin);
-
-    // Adjust mainwin and its subwindows
-    wresize(mainwin, LINES - 1, COLS);
-    wclear(mainwin);
-    box(mainwin, 0, 0);
-    wrefresh(mainwin);
-
-    // Adjust dirwin and previewwin sizes
-    SIZE dir_win_width = COLS / 2;
-    SIZE preview_win_width = COLS - dir_win_width;
-
-    wresize(dirwin, LINES - 1, dir_win_width);
-    wresize(previewwin, LINES - 1, preview_win_width);
-    mvwin(previewwin, 0, dir_win_width);
-
-    wclear(dirwin);
-    box(dirwin, 0, 0);
-    wrefresh(dirwin);
-
-    wclear(previewwin);
-    box(previewwin, 0, 0);
-    wrefresh(previewwin);
 }
 /**
  * Function to draw and scroll the banner text
@@ -641,6 +625,8 @@ int main() {
     keypad(stdscr, TRUE);
     curs_set(0);
     timeout(100);
+    int notif_height = 1;
+    int banner_height = 3; 
 
     // Initialize  notif windows
     notifwin = newwin(1, COLS, LINES - 1, 0);
@@ -653,14 +639,12 @@ int main() {
     wtimeout(mainwin, 100);
 
  	// Initialize banner window
-    int banner_height = 3; // Height of the banner window
     bannerwin = newwin(banner_height, COLS, 0, 0);
     wbkgd(bannerwin, COLOR_PAIR(1)); // Set background color
     box(bannerwin, 0, 0);
     wrefresh(bannerwin);
 
 	// Initialize notifwin below the banner
-	int notif_height = 1;
 	notifwin = newwin(notif_height, COLS, banner_height + LINES - 1 - notif_height, 0);
 	werase(notifwin);
 	box(notifwin, 0, 0);
@@ -671,8 +655,13 @@ int main() {
 	wtimeout(mainwin, 100);
 
 	// Initialize subwindows
-	SIZE dir_win_width = COLS / 2;
-	SIZE preview_win_width = COLS - dir_win_width;
+	SIZE dir_win_width = MAX(COLS / 2, 20);
+	SIZE preview_win_width = MAX(COLS - dir_win_width, 20);
+
+	if (dir_win_width + preview_win_width > COLS) {
+	    dir_win_width = COLS / 2;
+	    preview_win_width = COLS - dir_win_width;
+	}
 
 	dirwin = subwin(mainwin, LINES - banner_height - notif_height, dir_win_width, banner_height, 0);
 	box(dirwin, 0, 0);
