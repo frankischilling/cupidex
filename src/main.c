@@ -594,37 +594,39 @@ void handle_winch(int sig) {
  * @param offset the current offset for scrolling
  */
 void draw_scrolling_banner(WINDOW *window, const char *text, const char *build_info, int offset) {
-    int width = COLS; // Width of the banner window
+    int width = COLS - 2; // Adjust for border
     int text_len = strlen(text);
     int build_len = strlen(build_info);
 
-    // Calculate total length including padding before and after the text
-    int total_len = 2 * width + text_len + build_len + 2; // +2 for the spaces between text and build_info
+    // Calculate total length including padding
+    int total_len = width + text_len + build_len + 4; // +4 for spacing between text and build_info
 
-    // Create the scroll text buffer
-    char *scroll_text = malloc(total_len + 1); // +1 for null terminator
+    // Create the scroll text buffer with double the content for smooth wrapping
+    char *scroll_text = malloc(2 * total_len + 1);
     if (!scroll_text) return;
 
-    // Initialize the buffer with spaces
-    memset(scroll_text, ' ', total_len);
-    scroll_text[total_len] = '\0'; // Null-terminate the string
+    // Fill the buffer with spaces
+    memset(scroll_text, ' ', 2 * total_len);
+    scroll_text[2 * total_len] = '\0';
 
-    // Insert the text and build_info into the buffer
-    memcpy(scroll_text + width, text, text_len);
-    memcpy(scroll_text + width + text_len, "  ", 2); // Two spaces between text and build_info
-    memcpy(scroll_text + width + text_len + 2, build_info, build_len);
+    // Copy the text pattern twice for smooth wrapping
+    for (int i = 0; i < 2; i++) {
+        int pos = i * total_len;
+        memcpy(scroll_text + pos, text, text_len);
+        memcpy(scroll_text + pos + text_len + 2, build_info, build_len);
+    }
 
-    // Adjust offset to wrap around total_len
-    offset = offset % total_len;
-
-    // Display the portion of the scroll text that fits within the banner window
+    // Draw the banner
     werase(window);
+    box(window, 0, 0);
+    
+    // Display the scrolling text
+    offset = offset % total_len;
     mvwprintw(window, 1, 1, "%.*s", width, scroll_text + offset);
+    
     wrefresh(window);
-
     free(scroll_text);
 }
-
 
 /** Function to handle cleanup and exit
  *
@@ -728,7 +730,7 @@ int main() {
     int banner_speed = 100; // in milliseconds
 
 	// Calculate the total scroll length for the banner
-	int total_scroll_length = 2 * COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 2; // +2 for spaces
+	int total_scroll_length = COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 4;
 
 	int ch;
     while ((ch = getch()) != KEY_F(1)) {
