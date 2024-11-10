@@ -26,7 +26,7 @@
 #define CTRL_E 5
 
 #define BANNER_TEXT "  CupidFM - Terminal File Manager  "
-#define BUILD_INFO "  Build: 2024-11-08  "
+#define BUILD_INFO "  Build: 2024-11-10  "
 
 // Global resize flag
 volatile sig_atomic_t resized = 0;
