@@ -37,15 +37,16 @@ const char *supported_mime_types[] = {
         "text/html",              // HTML files
         "text/css",               // CSS files
         "text/x-c++src",          // C++ source files
-        "application/x-yaml",    // YAML files
-        "application/x-sh",      // Shell scripts
-        "application/x-perl",    // Perl scripts
-        "application/x-php",     // PHP scripts
-        "text/x-rustsrc",        // Rust source files
-        "text/x-go",             // Go source files
-        "text/x-swift",          // Swift source files
-        "text/x-kotlin"          // Kotlin source files
-};
+        "application/x-yaml",     // YAML files
+        "application/x-sh",       // Shell scripts
+        "application/x-perl",     // Perl scripts
+        "application/x-php",      // PHP scripts
+        "text/x-rustsrc",         // Rust source files
+        "text/x-go",              // Go source files
+        "text/x-swift",           // Swift source files
+        "text/x-kotlin",          // Kotlin source files
+        "text/x-makefile",        // Makefile files
+};  
 
 size_t num_supported_mime_types = sizeof(supported_mime_types) / sizeof(supported_mime_types[0]);
 // FileAttributes structure

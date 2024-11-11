@@ -319,7 +319,8 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
             fclose(file);
 
             if (line_num < max_y - 1) {
-                mvwprintw(window, line_num++, 2, "End of file");
+                mvwprintw(window, line_num++, 2, "--------------------------------");
+                mvwprintw(window, line_num++, 2, "[End of file]");
             }
         } else {
             mvwprintw(window, 7, 2, "Unable to open file for preview");
@@ -626,8 +627,7 @@ int main() {
     curs_set(0);
     timeout(100);
     int notif_height = 1;
-    int banner_height = 3; // Height of the banner window
-
+    int banner_height = 3; 
 
     // Initialize  notif windows
     notifwin = newwin(1, COLS, LINES - 1, 0);
