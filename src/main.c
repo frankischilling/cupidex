@@ -626,7 +626,8 @@ int main() {
     curs_set(0);
     timeout(100);
     int notif_height = 1;
-    int banner_height = 3; 
+    int banner_height = 3; // Height of the banner window
+
 
     // Initialize  notif windows
     notifwin = newwin(1, COLS, LINES - 1, 0);
