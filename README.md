@@ -23,7 +23,7 @@ CupidFM is a terminal-based file manager implemented in C, using the `ncurses` l
 - [ ] Add easy select for selecting file names, dir names, and current directory
 - [ ] Implement copy and paste short cuts, relating to easy select for file names... etc while also editing a file
 - [X] Fix weird crash on different window resize
-- [ ] Fix text buffer from breaking the preview win border
+- [X] Fix text buffer from breaking the preview win border
 - [ ] Fix dir window scrolling up and down when you hit the bottom or top it brings you to either side
 - [X] Fix issue with title banner notif rotating showing char when rotating from left side to right
 - [X] Add build ver, and name somewhere
