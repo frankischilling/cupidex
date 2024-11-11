@@ -336,9 +336,10 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int 
  * @param notifwin the window to display notifications
  */
 void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifwin) {
-    int fd = open(file_path, O_RDWR | O_CREAT, 0644);
+    // Open the file for reading and writing
+    int fd = open(file_path, O_RDWR);
     if (fd == -1) {
-        mvwprintw(notifwin, 1, 2, "Unable to open file for editing");
+        mvwprintw(notifwin, 1, 2, "Unable to open file");
         wrefresh(notifwin);
         return;
     }
@@ -356,28 +357,38 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
     box(window, 0, 0);
 
     int ch;
-    // int row = 1; // Remove this line since 'row' is unused
-
     TextBuffer text_buffer;
     init_text_buffer(&text_buffer);
 
     char line[256];
-    bool is_empty = true; // Track if the file is empty
+    bool is_empty = true;
 
     // Read the file content into the text buffer
     while (fgets(line, sizeof(line), file)) {
         is_empty = false;
         line[strcspn(line, "\n")] = '\0';
 
+        // Replace tabs with spaces
+        for (char *p = line; *p; p++) {
+            if (*p == '\t') {
+                *p = ' ';
+            }
+        }
+
         if (text_buffer.num_lines >= text_buffer.capacity) {
             text_buffer.capacity *= 2;
             text_buffer.lines = realloc(text_buffer.lines, sizeof(char*) * text_buffer.capacity);
+            if (!text_buffer.lines) {
+                mvwprintw(notifwin, 1, 2, "Memory allocation error");
+                wrefresh(notifwin);
+                fclose(file);
+                return;
+            }
         }
 
         text_buffer.lines[text_buffer.num_lines++] = strdup(line);
     }
 
-    // If the file is empty, add a single empty line for editing
     if (is_empty) {
         text_buffer.lines[text_buffer.num_lines++] = strdup("");
     }
@@ -387,19 +398,17 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
 
     // Enable cursor and allow editing
     curs_set(1);
-    keypad(window, TRUE);  // Enable keypad mode to handle special keys
+    keypad(window, TRUE);
     wmove(window, 1, 2);
 
-    // Initialize cursor position and start line for scrolling
     int cursor_line = 0;
     int cursor_col = 0;
     int start_line = 0;
 
     bool exit_edit_mode = false;
     while (!exit_edit_mode && (ch = wgetch(window)) != KEY_F(1)) {
-        int max_y, max_x;
-        getmaxyx(window, max_y, max_x);
-        (void)max_x;  // Suppress unused variable warning
+        int max_y;
+        getmaxyx(window, max_y, max_y); // Only use max_y
 
         switch (ch) {
             case KEY_UP:
@@ -416,9 +425,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                     cursor_line++;
                     if (cursor_line - start_line >= max_y - 2) {
                         start_line = cursor_line - (max_y - 3);
-                    }
-                    if (cursor_line < start_line) {
-                        start_line = cursor_line;
                     }
                     cursor_col = MIN(cursor_col, (int)strlen(text_buffer.lines[cursor_line]));
                 }
@@ -445,18 +451,22 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                     }
                 }
                 break;
-            case '\n':
-            {
-                // Split the current line at the cursor position
+            case '\n': {
                 char *current_line = text_buffer.lines[cursor_line];
                 char *new_line = strdup(current_line + cursor_col);
                 current_line[cursor_col] = '\0';
 
-                // Insert the new line into the buffer
                 if (text_buffer.num_lines >= text_buffer.capacity) {
                     text_buffer.capacity *= 2;
                     text_buffer.lines = realloc(text_buffer.lines, sizeof(char*) * text_buffer.capacity);
+                    if (!text_buffer.lines) {
+                        mvwprintw(notifwin, 1, 2, "Memory allocation error");
+                        wrefresh(notifwin);
+                        fclose(file);
+                        return;
+                    }
                 }
+
                 for (int i = text_buffer.num_lines; i > cursor_line + 1; i--) {
                     text_buffer.lines[i] = text_buffer.lines[i - 1];
                 }
@@ -473,12 +483,10 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
             case KEY_BACKSPACE:
             case 127:
                 if (cursor_col > 0) {
-                    // Remove character before cursor
                     char *current_line = text_buffer.lines[cursor_line];
                     memmove(&current_line[cursor_col - 1], &current_line[cursor_col], strlen(current_line) - cursor_col + 1);
                     cursor_col--;
                 } else if (cursor_line > 0) {
-                    // Merge with previous line
                     int prev_len = (int)strlen(text_buffer.lines[cursor_line - 1]);
                     int curr_len = (int)strlen(text_buffer.lines[cursor_line]);
 
@@ -486,7 +494,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                     strcat(text_buffer.lines[cursor_line - 1], text_buffer.lines[cursor_line]);
                     free(text_buffer.lines[cursor_line]);
 
-                    // Shift lines up
                     for (int i = cursor_line; i < text_buffer.num_lines - 1; i++) {
                         text_buffer.lines[i] = text_buffer.lines[i + 1];
                     }
@@ -500,11 +507,7 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                 }
                 break;
             case 7:  // Ctrl+G
-            {
-                // Close the current file stream
                 fclose(file);
-
-                // Reopen the file in write mode
                 file = fopen(file_path, "w");
                 if (file == NULL) {
                     mvwprintw(notifwin, max_y - 2, 2, "Error opening file for writing");
@@ -512,7 +515,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                     break;
                 }
 
-                // Write the content from the text buffer to the file
                 for (int i = 0; i < text_buffer.num_lines; i++) {
                     if (fprintf(file, "%s\n", text_buffer.lines[i]) < 0) {
                         mvwprintw(notifwin, max_y - 2, 2, "Error writing to file");
@@ -521,9 +523,7 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                     }
                 }
 
-                fflush(file);  // Ensure all data is written
-
-                // Close and reopen the file in read/write mode for further operations
+                fflush(file);
                 fclose(file);
                 file = fopen(file_path, "r+");
                 if (file == NULL) {
@@ -536,16 +536,14 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                 mvwprintw(notifwin, 0, 0, "File saved: %s", file_path);
                 wrefresh(notifwin);
                 break;
-            }
             case 5:   // Ctrl+E
                 exit_edit_mode = true;
                 break;
             default:
                 if (ch >= 32 && ch <= 126) {
-                    // Insert character at cursor position
                     char *current_line = text_buffer.lines[cursor_line];
                     int line_len = (int)strlen(current_line);
-                    current_line = realloc(current_line, line_len + 2); // +1 for new char, +1 for null terminator
+                    current_line = realloc(current_line, line_len + 2);
                     memmove(&current_line[cursor_col + 1], &current_line[cursor_col], line_len - cursor_col + 1);
                     current_line[cursor_col] = ch;
                     text_buffer.lines[cursor_line] = current_line;

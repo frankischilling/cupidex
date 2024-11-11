@@ -313,6 +313,14 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
             // Display file content from start_line onward
             while (fgets(line, sizeof(line), file) && line_num < max_y - 1) {
                 line[strcspn(line, "\n")] = '\0'; // Remove newline character
+
+                // Replace tabs with spaces
+                for (char *p = line; *p; p++) {
+                    if (*p == '\t') {
+                        *p = ' ';
+                    }
+                }
+
                 mvwprintw(window, line_num++, 2, "%.*s", max_x - 4, line);
             }
 
