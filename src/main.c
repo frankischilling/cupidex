@@ -22,13 +22,19 @@
 #include "vector.h"
 #include "files.h"
 #include "vecstack.h"
+#include "main.h"
 
 #define MAX_PATH_LENGTH 256 // 256
 #define TAB 9
 #define CTRL_E 5
 
-#define BANNER_TEXT "  CupidFM - Terminal File Manager  "
-#define BUILD_INFO "  Build: 2024-11-08  "
+// Global variable definitions
+const char *BANNER_TEXT = "Welcome to CupidFM - Press F1 to exit";
+const char *BUILD_INFO = "Version 1.0";
+WINDOW *bannerwin = NULL;
+WINDOW *notifwin = NULL;
+struct timespec last_scroll_time = {0, 0};
+
 
 #define BANNER_SCROLL_INTERVAL 250000  // Microseconds between scroll updates (250ms)
 #define INPUT_CHECK_INTERVAL 10        // Milliseconds for input checking (10ms)
@@ -60,8 +66,6 @@ typedef struct {
     int preview_start_line;
     // Add more state variables here if needed
 } AppState;
-
-static struct timespec last_scroll_time = {0, 0};
 
 /** Function to show directory tree recursively
  *
@@ -399,14 +403,15 @@ void redraw_all_windows(AppState *state) {
     int dir_start_x = 1;                 // Start after main window's left border
     int preview_start_x = dir_win_width + 1; // Start after directory window
 
+    // Ensure windows are created with correct positions
     dirwin = derwin(mainwin, inner_height, dir_win_width - 1, inner_start_y, dir_start_x);
     previewwin = derwin(mainwin, inner_height, preview_win_width, inner_start_y, preview_start_x);
 
     notifwin = newwin(notif_height, new_cols, new_lines - notif_height, 0);
     box(notifwin, 0, 0);
 
-    // Update cursor and slice state
-    state->dir_window_cas.num_lines = inner_height;
+    // Update cursor and slice state with correct dimensions
+    state->dir_window_cas.num_lines = inner_height - 2;  // Account for borders
     fix_cursor(&state->dir_window_cas);
 
     // Draw borders for subwindows
@@ -761,20 +766,26 @@ int main() {
 
     // Initialize scrolling variables
     int banner_offset = 0;
+    struct timespec last_update_time;
+    clock_gettime(CLOCK_MONOTONIC, &last_update_time);
 
 	// Calculate the total scroll length for the banner
 	int total_scroll_length = COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 4;
 
 	int ch;
     while ((ch = getch()) != KEY_F(1)) {
-        if (resized) {
-            redraw_all_windows(&state);
-            resized = 0;
-        }
+        // Check if enough time has passed to update the banner
+        struct timespec current_time;
+        clock_gettime(CLOCK_MONOTONIC, &current_time);
+        long time_diff = (current_time.tv_sec - last_update_time.tv_sec) * 1000000 +
+                         (current_time.tv_nsec - last_update_time.tv_nsec) / 1000;
 
-        // Update banner with current offset
-        draw_scrolling_banner(bannerwin, BANNER_TEXT, BUILD_INFO, banner_offset);
-        banner_offset = (banner_offset + 1) % total_scroll_length;
+        if (time_diff >= BANNER_SCROLL_INTERVAL) {
+            // Update banner with current offset
+            draw_scrolling_banner(bannerwin, BANNER_TEXT, BUILD_INFO, banner_offset);
+            banner_offset = (banner_offset + 1) % total_scroll_length;
+            last_update_time = current_time;
+        }
 
         bool should_clear_notif = true;
         if (ch != ERR) {

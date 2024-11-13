@@ -22,8 +22,11 @@
 #include "utils.h"                 // for path_join, is_directory
 #include "files.h"                 // for FileAttributes, FileAttr, MAX_PATH_LENGTH
 
+#include <time.h>
+
 #define MAX_PATH_LENGTH 1024
 #define MIN_INT_SIZE_T(x, y) (((size_t)(x) > (y)) ? (y) : (x))
+#define BANNER_UPDATE_INTERVAL 50000 // 50ms in microseconds
 
 // Supported MIME types
 const char *supported_mime_types[] = {
@@ -333,21 +336,23 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int 
  *
  * @param window the window to display the file content
  * @param file_path the path to the file to edit
- * @param notifwin the window to display notifications
  */
-void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifwin) {
+void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notification_window) {
+    // Store previous scroll time
+    struct timespec prev_scroll_time = last_scroll_time;
+
     // Open the file for reading and writing
     int fd = open(file_path, O_RDWR);
     if (fd == -1) {
-        mvwprintw(notifwin, 1, 2, "Unable to open file");
-        wrefresh(notifwin);
+        mvwprintw(notification_window, 1, 2, "Unable to open file");
+        wrefresh(notification_window);
         return;
     }
 
     FILE *file = fdopen(fd, "r+");
     if (file == NULL) {
-        mvwprintw(notifwin, 1, 2, "Unable to open file stream");
-        wrefresh(notifwin);
+        mvwprintw(notification_window, 1, 2, "Unable to open file stream");
+        wrefresh(notification_window);
         close(fd);
         return;
     }
@@ -379,8 +384,8 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
             text_buffer.capacity *= 2;
             text_buffer.lines = realloc(text_buffer.lines, sizeof(char*) * text_buffer.capacity);
             if (!text_buffer.lines) {
-                mvwprintw(notifwin, 1, 2, "Memory allocation error");
-                wrefresh(notifwin);
+                mvwprintw(notification_window, 1, 2, "Memory allocation error");
+                wrefresh(notification_window);
                 fclose(file);
                 return;
             }
@@ -406,9 +411,22 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
     int start_line = 0;
 
     bool exit_edit_mode = false;
-    while (!exit_edit_mode && (ch = wgetch(window)) != KEY_F(1)) {
+    
+    // Set window timeout for non-blocking input
+    wtimeout(window, 10);  // Short timeout for responsive input
+
+    while (!exit_edit_mode) {
+        ch = wgetch(window);
+        
+        if (ch == ERR) {
+            napms(10);
+            continue;
+        }
+
+        if (ch == KEY_F(1)) break;
+
         int max_y;
-        getmaxyx(window, max_y, max_y); // Only use max_y
+        getmaxyx(window, max_y, max_y);
 
         switch (ch) {
             case KEY_UP:
@@ -460,8 +478,8 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                     text_buffer.capacity *= 2;
                     text_buffer.lines = realloc(text_buffer.lines, sizeof(char*) * text_buffer.capacity);
                     if (!text_buffer.lines) {
-                        mvwprintw(notifwin, 1, 2, "Memory allocation error");
-                        wrefresh(notifwin);
+                        mvwprintw(notification_window, 1, 2, "Memory allocation error");
+                        wrefresh(notification_window);
                         fclose(file);
                         return;
                     }
@@ -510,15 +528,15 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                 fclose(file);
                 file = fopen(file_path, "w");
                 if (file == NULL) {
-                    mvwprintw(notifwin, max_y - 2, 2, "Error opening file for writing");
-                    wrefresh(notifwin);
+                    mvwprintw(notification_window, LINES - 2, 2, "Error opening file for writing");
+                    wrefresh(notification_window);
                     break;
                 }
 
                 for (int i = 0; i < text_buffer.num_lines; i++) {
                     if (fprintf(file, "%s\n", text_buffer.lines[i]) < 0) {
-                        mvwprintw(notifwin, max_y - 2, 2, "Error writing to file");
-                        wrefresh(notifwin);
+                        mvwprintw(notification_window, LINES - 2, 2, "Error writing to file");
+                        wrefresh(notification_window);
                         break;
                     }
                 }
@@ -527,14 +545,14 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
                 fclose(file);
                 file = fopen(file_path, "r+");
                 if (file == NULL) {
-                    mvwprintw(notifwin, max_y - 2, 2, "Error reopening file");
-                    wrefresh(notifwin);
+                    mvwprintw(notification_window, LINES - 2, 2, "Error reopening file");
+                    wrefresh(notification_window);
                     break;
                 }
 
-                werase(notifwin);
-                mvwprintw(notifwin, 0, 0, "File saved: %s", file_path);
-                wrefresh(notifwin);
+                werase(notification_window);
+                mvwprintw(notification_window, 0, 0, "File saved: %s", file_path);
+                wrefresh(notification_window);
                 break;
             case 5:   // Ctrl+E
                 exit_edit_mode = true;
@@ -558,6 +576,12 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifw
 
     fclose(file);
     curs_set(0);
+
+    // Reset window timeout to blocking mode
+    wtimeout(window, -1);
+
+    // Restore banner scrolling state
+    last_scroll_time = prev_scroll_time;
 
     // Clean up
     for (int i = 0; i < text_buffer.num_lines; i++) {
