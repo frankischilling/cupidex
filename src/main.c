@@ -30,6 +30,9 @@
 #define BANNER_TEXT "  CupidFM - Terminal File Manager  "
 #define BUILD_INFO "  Build: 2024-11-08  "
 
+#define BANNER_SCROLL_INTERVAL 250000  // Microseconds between scroll updates (250ms)
+#define INPUT_CHECK_INTERVAL 10        // Milliseconds for input checking (10ms)
+
 // Global resize flag
 volatile sig_atomic_t resized = 0;
 
@@ -57,6 +60,8 @@ typedef struct {
     int preview_start_line;
     // Add more state variables here if needed
 } AppState;
+
+static struct timespec last_scroll_time = {0, 0};
 
 /** Function to show directory tree recursively
  *
@@ -453,11 +458,22 @@ void reload_directory(Vector *files, const char *current_directory) {
  * @param selected_entry the selected entry
  */
 void navigate_up(CursorAndSlice *cas, const Vector *files, const char **selected_entry) {
-    if (cas->num_files > 1) {
-        cas->cursor -= 1;
+    if (cas->num_files > 0) {
+        if (cas->cursor == 0) {
+            // Wrap to bottom
+            cas->cursor = cas->num_files - 1;
+            // Adjust start to show the last page of entries
+            cas->start = MAX(0, cas->num_files - cas->num_lines);
+        } else {
+            cas->cursor -= 1;
+            // Adjust start if cursor would go off screen
+            if (cas->cursor < cas->start) {
+                cas->start = cas->cursor;
+            }
+        }
         fix_cursor(cas);
+        *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
     }
-    *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
 }
 /** Function to navigate down in the directory window
  *
@@ -466,11 +482,21 @@ void navigate_up(CursorAndSlice *cas, const Vector *files, const char **selected
  * @param selected_entry the selected entry
  */
 void navigate_down(CursorAndSlice *cas, const Vector *files, const char **selected_entry) {
-    if (cas->num_files > 1) {
-        cas->cursor += 1;
+    if (cas->num_files > 0) {
+        if (cas->cursor >= cas->num_files - 1) {
+            // Wrap to top
+            cas->cursor = 0;
+            cas->start = 0;
+        } else {
+            cas->cursor += 1;
+            // Adjust start if cursor would go off screen
+            if (cas->cursor >= cas->start + cas->num_lines) {
+                cas->start = cas->cursor - cas->num_lines + 1;
+            }
+        }
         fix_cursor(cas);
+        *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
     }
-    *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
 }
 /** Function to navigate left in the directory window
  *
@@ -587,38 +613,48 @@ void handle_winch(int sig) {
  * @param offset the current offset for scrolling
  */
 void draw_scrolling_banner(WINDOW *window, const char *text, const char *build_info, int offset) {
-    int width = COLS - 2; // Adjust for border
+    struct timespec current_time;
+    clock_gettime(CLOCK_MONOTONIC, &current_time);
+    
+    // Only update banner if enough time has passed
+    long time_diff = (current_time.tv_sec - last_scroll_time.tv_sec) * 1000000 +
+                    (current_time.tv_nsec - last_scroll_time.tv_nsec) / 1000;
+    
+    if (time_diff < BANNER_SCROLL_INTERVAL) {
+        return;  // Skip update if not enough time has passed
+    }
+    
+    int width = COLS - 2;
     int text_len = strlen(text);
     int build_len = strlen(build_info);
-
+    
     // Calculate total length including padding
-    int total_len = width + text_len + build_len + 4; // +4 for spacing between text and build_info
-
-    // Create the scroll text buffer with double the content for smooth wrapping
+    int total_len = width + text_len + build_len + 4;
+    
+    // Create the scroll text buffer
     char *scroll_text = malloc(2 * total_len + 1);
     if (!scroll_text) return;
-
-    // Fill the buffer with spaces
+    
     memset(scroll_text, ' ', 2 * total_len);
     scroll_text[2 * total_len] = '\0';
-
+    
     // Copy the text pattern twice for smooth wrapping
     for (int i = 0; i < 2; i++) {
         int pos = i * total_len;
         memcpy(scroll_text + pos, text, text_len);
         memcpy(scroll_text + pos + text_len + 2, build_info, build_len);
     }
-
+    
     // Draw the banner
     werase(window);
     box(window, 0, 0);
-    
-    // Display the scrolling text
-    offset = offset % total_len;
     mvwprintw(window, 1, 1, "%.*s", width, scroll_text + offset);
-    
     wrefresh(window);
+    
     free(scroll_text);
+    
+    // Update last scroll time
+    last_scroll_time = current_time;
 }
 
 /** Function to handle cleanup and exit
@@ -721,11 +757,10 @@ int main() {
     redraw_all_windows(&state);
 
 	// Set a separate timeout for mainwin to handle scrolling
-	wtimeout(mainwin, 50); // Adjust as needed
+	wtimeout(mainwin, INPUT_CHECK_INTERVAL);  // Set shorter timeout for input checking
 
     // Initialize scrolling variables
     int banner_offset = 0;
-    int banner_speed = 100; // in milliseconds
 
 	// Calculate the total scroll length for the banner
 	int total_scroll_length = COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 4;
@@ -737,9 +772,9 @@ int main() {
             resized = 0;
         }
 
- 		// Update banner offset and handle scrolling
-    	banner_offset = (banner_offset + 1) % total_scroll_length;
-    	draw_scrolling_banner(bannerwin, BANNER_TEXT, BUILD_INFO, banner_offset);
+        // Update banner with current offset
+        draw_scrolling_banner(bannerwin, BANNER_TEXT, BUILD_INFO, banner_offset);
+        banner_offset = (banner_offset + 1) % total_scroll_length;
 
         bool should_clear_notif = true;
         if (ch != ERR) {
@@ -855,9 +890,6 @@ int main() {
                     break;
             }
         }
-
-		// Sleep or delay to control scrolling speed
-    	usleep(banner_speed * 1000);
 
         // Clear notification window only if no new notification was displayed
         if (should_clear_notif) {
