@@ -26,7 +26,7 @@
 
 #define MAX_PATH_LENGTH 1024
 #define MIN_INT_SIZE_T(x, y) (((size_t)(x) > (y)) ? (y) : (x))
-#define BANNER_UPDATE_INTERVAL 50000 // 50ms in microseconds
+#define FILES_BANNER_UPDATE_INTERVAL 50000 // 50ms in microseconds
 
 // Supported MIME types
 const char *supported_mime_types[] = {
@@ -316,19 +316,45 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int 
     int max_y, max_x;
     getmaxyx(window, max_y, max_x);
 
+    // Calculate the width needed for line numbers
+    int line_num_width = snprintf(NULL, 0, "%d", buffer->num_lines) + 1;
+    
+    // Draw separator line for line numbers
+    for (int i = 1; i < max_y - 1; i++) {
+        mvwaddch(window, i, line_num_width + 2, ACS_VLINE);
+    }
+
+    // Display line numbers and content
     for (int i = 0; i < max_y - 2 && (start_line + i) < buffer->num_lines; i++) {
-        const char *line = buffer->lines[start_line + i] ? buffer->lines[start_line + i] : ""; // Safely handle NULL
+        const char *line = buffer->lines[start_line + i] ? buffer->lines[start_line + i] : "";
+        
+        // Print line number with right alignment
+        mvwprintw(window, i + 1, 2, "%*d", line_num_width - 1, start_line + i + 1);
+        
+        // Calculate the content start position
+        int content_start = line_num_width + 4;
+        
+        // Print the line content after the separator
+        mvwprintw(window, i + 1, content_start, "%.*s", max_x - content_start - 2, line);
+        
+        // If this is the cursor line, highlight the cursor position
         if ((start_line + i) == cursor_line) {
+            // Get the actual character at cursor position
+            char cursor_char = ' ';  // Default to space if at end of line
+            if (cursor_col < (int)strlen(line)) {
+                cursor_char = line[cursor_col];
+            }
+            
+            // Move to cursor position and highlight the character
+            wmove(window, i + 1, content_start + cursor_col);
             wattron(window, A_REVERSE);
-        }
-        mvwprintw(window, i + 1, 2, "%.*s", max_x - 4, line);
-        if ((start_line + i) == cursor_line) {
+            waddch(window, cursor_char);
             wattroff(window, A_REVERSE);
         }
     }
 
     // Move cursor to the appropriate position
-    wmove(window, cursor_line - start_line + 1, cursor_col + 2);
+    wmove(window, cursor_line - start_line + 1, line_num_width + 4 + cursor_col);
     wrefresh(window);
 }
 /**
@@ -338,28 +364,34 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int 
  * @param file_path the path to the file to edit
  */
 void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notification_window) {
-    // Store previous scroll time
-    struct timespec prev_scroll_time = last_scroll_time;
+    // Remove banner scrolling state manipulation
+    // struct timespec prev_scroll_time = last_scroll_time;
 
     // Open the file for reading and writing
     int fd = open(file_path, O_RDWR);
     if (fd == -1) {
+        pthread_mutex_lock(&banner_mutex);
         mvwprintw(notification_window, 1, 2, "Unable to open file");
         wrefresh(notification_window);
+        pthread_mutex_unlock(&banner_mutex);
         return;
     }
 
     FILE *file = fdopen(fd, "r+");
     if (file == NULL) {
+        pthread_mutex_lock(&banner_mutex);
         mvwprintw(notification_window, 1, 2, "Unable to open file stream");
         wrefresh(notification_window);
+        pthread_mutex_unlock(&banner_mutex);
         close(fd);
         return;
     }
 
     // Clear the window before editing
+    pthread_mutex_lock(&banner_mutex);
     werase(window);
     box(window, 0, 0);
+    pthread_mutex_unlock(&banner_mutex);
 
     int ch;
     TextBuffer text_buffer;
@@ -576,14 +608,14 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
 
     fclose(file);
     curs_set(0);
-
-    // Reset window timeout to blocking mode
+    
+    // Restore window timeout to blocking mode
     wtimeout(window, -1);
+    
+    // No need to restore banner state
+    // pthread_mutex_unlock(&banner_mutex);
 
-    // Restore banner scrolling state
-    last_scroll_time = prev_scroll_time;
-
-    // Clean up
+    // Clean up text buffer
     for (int i = 0; i < text_buffer.num_lines; i++) {
         free(text_buffer.lines[i]);
     }
@@ -634,3 +666,4 @@ bool is_supported_file_type(const char *filename) {
     magic_close(magic_cookie);
     return supported;
 }
+

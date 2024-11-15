@@ -17,6 +17,7 @@
 #include <time.h>      // For strftime
 #include <sys/ioctl.h> // For ioctl
 #include <termios.h>   // For resize_term
+#include <pthread.h>   // For threading
 // Local includes
 #include "utils.h"
 #include "vector.h"
@@ -34,6 +35,7 @@ const char *BUILD_INFO = "Version 1.0";
 WINDOW *bannerwin = NULL;
 WINDOW *notifwin = NULL;
 struct timespec last_scroll_time = {0, 0};
+pthread_mutex_t banner_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 #define BANNER_SCROLL_INTERVAL 250000  // Microseconds between scroll updates (250ms)
@@ -66,6 +68,9 @@ typedef struct {
     int preview_start_line;
     // Add more state variables here if needed
 } AppState;
+
+// Forward declaration of fix_cursor
+void fix_cursor(CursorAndSlice *cas);
 
 /** Function to show directory tree recursively
  *
@@ -199,52 +204,100 @@ int get_total_lines(const char *file_path) {
 void draw_directory_window(
         WINDOW *window,
         const char *directory,
-        FileAttr *files,
-        SIZE files_len,
-        SIZE selected_entry
+        Vector *files_vector,
+        CursorAndSlice *cas
 ) {
-    [[maybe_unused]]
     int cols, lines;
     getmaxyx(window, lines, cols);
 
+    // Clear the window and draw border
     werase(window);
     box(window, 0, 0);
-    mvwprintw(window, 0, 2, "Directory: %.*s", cols - 4, directory);
+    
+    // Draw directory path at top
+    mvwprintw(window, 0, 2, "Directory: %.*s", cols - 13, directory);
 
-    for (SIZE i = 0; i < files_len; i++) {
-        const char *current_name = FileAttr_get_name(files[i]);
+    // Calculate available lines for file entries (subtract 2 for border)
+    int max_entries = lines - 2;
+
+    // Ensure cursor is within bounds
+    fix_cursor(cas);
+
+    // Ensure start is within bounds
+    if (cas->start > cas->num_files - max_entries) {
+        cas->start = cas->num_files > max_entries ? cas->num_files - max_entries : 0;
+    }
+
+    // Ensure start is not negative
+    if (cas->start < 0) {
+        cas->start = 0;
+    }
+
+    // Adjust start to ensure the cursor is visible
+    if (cas->cursor >= cas->start + max_entries) {
+        cas->start = cas->cursor - max_entries + 1;
+    }
+
+    // Determine the range of files to display
+    SIZE end = cas->start + max_entries;
+    if (end > cas->num_files) {
+        end = cas->num_files;
+    }
+
+    // Draw file entries
+    for (SIZE i = cas->start; i < end; i++) {
+        FileAttr current_file = files_vector->el[i];
+        const char *current_name = FileAttr_get_name(current_file);
         const char *extension = strrchr(current_name, '.');
         int extension_len = extension ? strlen(extension) : 0;
 
+        // Calculate maximum display length (subtract 4 for border and padding)
         int max_display_length = cols - 4;
 
-        if (i == selected_entry)
+        // Highlight selected entry
+        if (i == cas->cursor)
             wattron(window, A_REVERSE);
-        if (FileAttr_is_dir(files[i]))
+        if (FileAttr_is_dir(current_file))
             wattron(window, A_BOLD);
 
+        // Handle long filenames
         if ((int)strlen(current_name) > max_display_length) {
-            if (extension_len && extension_len + 5 < max_display_length)
+            if (extension_len && extension_len + 5 < max_display_length) {
+                // Show start of filename + ... + extension
                 mvwprintw(
-                        window, i + 2, 2,
-                        "%.*s... %s",
-                        max_display_length - 4 - extension_len, current_name,
-                        extension
+                    window, i - cas->start + 1, 2,
+                    "%.*s... %s",
+                    max_display_length - 4 - extension_len,
+                    current_name,
+                    extension
                 );
-            else
+            } else {
+                // Show truncated filename with ...
                 mvwprintw(
-                        window, i + 2, 2,
-                        "%.*s...",
-                        max_display_length - 3, current_name
+                    window, i - cas->start + 1, 2,
+                    "%.*s...",
+                    max_display_length - 3,
+                    current_name
                 );
+            }
         } else {
-            mvwprintw(window, i + 2, 2, "%s", current_name);
+            // Show full filename
+            mvwprintw(window, i - cas->start + 1, 2, "%s", current_name);
         }
 
-        if (i == selected_entry)
+        // Remove highlighting
+        if (i == cas->cursor)
             wattroff(window, A_REVERSE);
-        if (FileAttr_is_dir(files[i]))
+        if (FileAttr_is_dir(current_file))
             wattroff(window, A_BOLD);
+    }
+
+    // Show total count and current position at the bottom
+    if (cas->num_files > 0) {
+        mvwprintw(window, lines - 1, 2, "Item %d of %d", 
+                  cas->cursor + 1, cas->num_files);
+    } else {
+        mvwprintw(window, lines - 1, 2, "Directory empty");
     }
 
     wrefresh(window);
@@ -351,11 +404,23 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
  * @param cas the cursor and slice state
  */
 void fix_cursor(CursorAndSlice *cas) {
+    // Ensure cursor stays within valid range
     cas->cursor = MIN(cas->cursor, cas->num_files - 1);
     cas->cursor = MAX(0, cas->cursor);
 
-    cas->start = MIN(cas->start, cas->cursor);
-    cas->start = MAX(cas->start, cas->cursor + 1 - cas->num_lines);
+    // Calculate visible window size (subtract 2 for borders)
+    int visible_lines = cas->num_lines - 2;
+
+    // Adjust start position to keep cursor visible
+    if (cas->cursor < cas->start) {
+        cas->start = cas->cursor;
+    } else if (cas->cursor >= cas->start + visible_lines) {
+        cas->start = cas->cursor - visible_lines + 1;
+    }
+
+    // Ensure start position is valid
+    cas->start = MIN(cas->start, cas->num_files - visible_lines);
+    cas->start = MAX(0, cas->start);
 }
 /** Function to redraw all windows
  *
@@ -411,7 +476,7 @@ void redraw_all_windows(AppState *state) {
     box(notifwin, 0, 0);
 
     // Update cursor and slice state with correct dimensions
-    state->dir_window_cas.num_lines = inner_height - 2;  // Account for borders
+    state->dir_window_cas.num_lines = inner_height;
     fix_cursor(&state->dir_window_cas);
 
     // Draw borders for subwindows
@@ -422,9 +487,8 @@ void redraw_all_windows(AppState *state) {
     draw_directory_window(
         dirwin,
         state->current_directory,
-        (FileAttr *)&state->files.el[state->dir_window_cas.start],
-        MIN(state->dir_window_cas.num_lines, state->dir_window_cas.num_files - state->dir_window_cas.start),
-        state->dir_window_cas.cursor - state->dir_window_cas.start
+        &state->files,
+        &state->dir_window_cas
     );
 
     draw_preview_window(
@@ -467,8 +531,10 @@ void navigate_up(CursorAndSlice *cas, const Vector *files, const char **selected
         if (cas->cursor == 0) {
             // Wrap to bottom
             cas->cursor = cas->num_files - 1;
+            // Calculate visible window size (subtract 2 for borders)
+            int visible_lines = cas->num_lines;
             // Adjust start to show the last page of entries
-            cas->start = MAX(0, cas->num_files - cas->num_lines);
+            cas->start = MAX(0, cas->num_files - visible_lines);
         } else {
             cas->cursor -= 1;
             // Adjust start if cursor would go off screen
@@ -494,9 +560,12 @@ void navigate_down(CursorAndSlice *cas, const Vector *files, const char **select
             cas->start = 0;
         } else {
             cas->cursor += 1;
+            // Calculate visible window size (subtract 2 for borders)
+            int visible_lines = cas->num_lines;
+            
             // Adjust start if cursor would go off screen
-            if (cas->cursor >= cas->start + cas->num_lines) {
-                cas->start = cas->cursor - cas->num_lines + 1;
+            if (cas->cursor >= cas->start + visible_lines) {
+                cas->start = cas->cursor - visible_lines + 1;
             }
         }
         fix_cursor(cas);
@@ -509,7 +578,7 @@ void navigate_down(CursorAndSlice *cas, const Vector *files, const char **select
  * @param files the list of files
  * @param cas the cursor and slice state
  */
-void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_window_cas) {
+void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_window_cas, AppState *state) {
     // Check if the current directory is the root directory
     if (strcmp(*current_directory, "/") != 0) {
         // If not the root directory, move up one level
@@ -530,11 +599,22 @@ void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_
     // Pop the last directory from the stack
     free(VecStack_pop(&directoryStack));
 
-    // Reset selected entries and scroll positions
+    // Reset cursor and start position
     dir_window_cas->cursor = 0;
     dir_window_cas->start = 0;
     dir_window_cas->num_lines = LINES - 5;
     dir_window_cas->num_files = Vector_len(*files);
+
+    // **NEW CODE**: Set selected_entry to the first file in the parent directory
+    if (dir_window_cas->num_files > 0) {
+        state->selected_entry = FileAttr_get_name(files->el[0]);
+    } else {
+        state->selected_entry = "";
+    }
+
+    werase(notifwin);
+    mvwprintw(notifwin, 0, 0, "Navigated to parent directory: %s", *current_directory);
+    wrefresh(notifwin);
 }
 /** Function to navigate right in the directory window
  *
@@ -594,12 +674,21 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
     dir_window_cas->num_lines = LINES - 5;
     dir_window_cas->num_files = Vector_len(*files);
 
+    // **NEW CODE**: Set selected_entry to the first file in the new directory
+    if (dir_window_cas->num_files > 0) {
+        state->selected_entry = FileAttr_get_name(files->el[0]);
+    } else {
+        state->selected_entry = "";
+    }
+
     // If there’s only one entry, automatically select it
-    if (Vector_len(*files) == 1) {
+    if (dir_window_cas->num_files == 1) {
         state->selected_entry = FileAttr_get_name(files->el[0]);
     }
 
-    wrefresh(mainwin);
+    werase(notifwin);
+    mvwprintw(notifwin, 0, 0, "Entered directory: %s", state->selected_entry);
+    wrefresh(notifwin);
 }
 /** Function to handle terminal window resize
  *
@@ -625,7 +714,7 @@ void draw_scrolling_banner(WINDOW *window, const char *text, const char *build_i
     long time_diff = (current_time.tv_sec - last_scroll_time.tv_sec) * 1000000 +
                     (current_time.tv_nsec - last_scroll_time.tv_nsec) / 1000;
     
-    if (time_diff < BANNER_SCROLL_INTERVAL) {
+    if (time_diff < BANNER_UPDATE_INTERVAL) {
         return;  // Skip update if not enough time has passed
     }
     
@@ -660,6 +749,34 @@ void draw_scrolling_banner(WINDOW *window, const char *text, const char *build_i
     
     // Update last scroll time
     last_scroll_time = current_time;
+}
+
+// Function to handle banner scrolling in a separate thread
+void *banner_scrolling_thread(void *arg) {
+    WINDOW *window = (WINDOW *)arg;
+    int banner_offset = 0;
+    struct timespec last_update_time;
+    clock_gettime(CLOCK_MONOTONIC, &last_update_time);
+
+    int total_scroll_length = COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 4;
+
+    while (1) {
+        struct timespec current_time;
+        clock_gettime(CLOCK_MONOTONIC, &current_time);
+        long time_diff = (current_time.tv_sec - last_update_time.tv_sec) * 1000000 +
+                         (current_time.tv_nsec - last_update_time.tv_nsec) / 1000;
+
+        if (time_diff >= BANNER_SCROLL_INTERVAL) {
+            draw_scrolling_banner(window, BANNER_TEXT, BUILD_INFO, banner_offset);
+            banner_offset = (banner_offset + 1) % total_scroll_length;
+            last_update_time = current_time;
+        }
+
+        // Sleep for a short duration to prevent busy-waiting
+        usleep(10000); // 10ms
+    }
+
+    return NULL;
 }
 
 /** Function to handle cleanup and exit
@@ -843,7 +960,7 @@ int main() {
                     break;
                 case KEY_LEFT:
                     if (active_window == DIRECTORY_WIN_ACTIVE) {
-                        navigate_left(&state.current_directory, &state.files, &state.dir_window_cas);
+                        navigate_left(&state.current_directory, &state.files, &state.dir_window_cas, &state);
                         state.preview_start_line = 0;
                         werase(notifwin);
                         mvwprintw(notifwin, 0, 0, "Navigated to parent directory");
@@ -912,9 +1029,8 @@ int main() {
         draw_directory_window(
                 dirwin,
                 state.current_directory,
-                (FileAttr *)&state.files.el[state.dir_window_cas.start],
-                MIN(state.dir_window_cas.num_lines, state.dir_window_cas.num_files - state.dir_window_cas.start),
-                state.dir_window_cas.cursor - state.dir_window_cas.start
+                &state.files,
+                &state.dir_window_cas
         );
 
         draw_preview_window(
