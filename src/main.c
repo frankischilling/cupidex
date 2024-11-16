@@ -5,7 +5,7 @@
 #include <stdio.h>     // for snprintf
 #include <stdlib.h>    // for free, malloc
 #include <unistd.h>    // for getenv
-#include <curses.h>    // for initscr, noecho, cbreak, keypad, curs_set, timeout, endwin, LINES, COLS, getch, timeout, wtimeout, ERR, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_F1, newwin, subwin, box, wrefresh, werase, mvwprintw, wattron, wattroff, A_REVERSE, A_BOLD, getmaxyx, refresh
+#include <ncurses.h>   // for initscr, noecho, cbreak, keypad, curs_set, timeout, endwin, LINES, COLS, getch, timeout, wtimeout, ERR, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_F1, newwin, subwin, box, wrefresh, werase, mvwprintw, wattron, wattroff, A_REVERSE, A_BOLD, getmaxyx, refresh
 #include <dirent.h>    // for opendir, readdir, closedir
 #include <sys/types.h> // for types like SIZE
 #include <sys/stat.h>  // for struct stat
@@ -18,6 +18,8 @@
 #include <sys/ioctl.h> // For ioctl
 #include <termios.h>   // For resize_term
 #include <pthread.h>   // For threading
+#include <locale.h>    // For setlocale
+
 // Local includes
 #include "utils.h"
 #include "vector.h"
@@ -25,7 +27,9 @@
 #include "vecstack.h"
 #include "main.h"
 #include "globals.h"
+
 #define MAX_PATH_LENGTH 256 // 256
+#define MAX_DISPLAY_LENGTH 32
 #define TAB 9
 #define CTRL_E 5
 
@@ -83,17 +87,16 @@ void fix_cursor(CursorAndSlice *cas);
  * @param max_x the maximum number of columns in the window
  */
 void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *line_num, int max_y, int max_x) {
-    // Add a tree preview label before showing the directory contents
     if (level == 0) {
         mvwprintw(window, 6, 2, "Directory Tree Preview:");
-        (*line_num)++;  // Increment line number to account for the label
+        (*line_num)++;
     }
 
-    // Check if the current line number exceeds the window's visible area
     if (*line_num >= max_y - 1) {
         mvwprintw(window, *line_num, 2, "...");
         return;
     }
+
     DIR *dir = opendir(dir_path);
     if (!dir) return;
 
@@ -101,18 +104,30 @@ void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *l
     struct stat statbuf;
     char full_path[MAX_PATH_LENGTH];
     char truncated_path[MAX_PATH_LENGTH];
-    bool truncated = false; // Flag to indicate path truncation
+    bool truncated = false;
+
+    // Initialize magic for MIME type detection
+    magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
+    if (magic_cookie == NULL || magic_load(magic_cookie, NULL) != 0) {
+        magic_close(magic_cookie);
+        return;
+    }
+
+    int current_line = *line_num;
 
     // Iterate through directory entries
     while ((entry = readdir(dir)) != NULL) {
-        // Skip "." and ".." entries
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
 
-        // Construct full path
+        // Skip entries that are not visible
+        if (current_line >= max_y - 1) {
+            mvwprintw(window, current_line, 2, "...");
+            break;
+        }
+
         int result = snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
         if (result < 0 || result >= (int)sizeof(full_path)) {
             truncated = true;
-            // Use a separate buffer for the truncated path
             snprintf(truncated_path, sizeof(truncated_path), "%.*s...", MAX_PATH_LENGTH - 4, full_path);
         } else {
             truncated = false;
@@ -120,33 +135,34 @@ void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *l
             truncated_path[sizeof(truncated_path) - 1] = '\0';
         }
 
-        // Retrieve file stats
         if (lstat(full_path, &statbuf) == -1) continue;
 
-        // Display the entry name with indentation and truncation indicator
-        if (*line_num < max_y - 1) {
-            const char *display_name = truncated ? "[Path too long]" : entry->d_name;
-            mvwprintw(window, (*line_num)++, 2 + level * 2, "%.*s", max_x - 4 - level * 2, display_name);
-
-            // Display additional directory information
-            if (S_ISDIR(statbuf.st_mode)) {
-                wattron(window, A_BOLD); // Highlight directories
-                mvwprintw(window, *line_num - 1, 2 + level * 2 + strlen(display_name), " [DIR]");
-                wattroff(window, A_BOLD);
+        // Determine emoji based on file type
+        const char *emoji = "📄"; // Default file emoji
+        if (S_ISDIR(statbuf.st_mode)) {
+            emoji = "📁";
+        } else {
+            const char *mime_type = magic_file(magic_cookie, full_path);
+            if (mime_type) {
+                emoji = get_file_emoji(mime_type);
             }
-
-            // Optionally add more details (size, permissions, etc.)
-            char perm[10];
-            snprintf(perm, sizeof(perm), "%o", statbuf.st_mode & 0777);
-            mvwprintw(window, *line_num - 1, max_x - 10, "%s", perm); // Permissions display
         }
 
-        // Recursively list directories
+        const char *display_name = truncated ? "[Path too long]" : entry->d_name;
+        mvwprintw(window, current_line++, 2 + level * 2, "%s %.*s", emoji, max_x - 4 - level * 2, display_name);
+
+        char perm[10];
+        snprintf(perm, sizeof(perm), "%o", statbuf.st_mode & 0777);
+        mvwprintw(window, current_line - 1, max_x - 10, "%s", perm);
+
         if (S_ISDIR(statbuf.st_mode)) {
-            show_directory_tree(window, truncated_path, level + 1, line_num, max_y, max_x);
+            show_directory_tree(window, truncated_path, level + 1, &current_line, max_y, max_x);
         }
     }
     closedir(dir);
+    magic_close(magic_cookie);
+
+    *line_num = current_line;
 }
 /** Function to update the directory stack with the new directory
  *
@@ -213,99 +229,77 @@ void draw_directory_window(
         Vector *files_vector,
         CursorAndSlice *cas
 ) {
-    int cols, lines;
-    getmaxyx(window, lines, cols);
-
+    int cols;
+    int __attribute__((unused)) throwaway;
+    getmaxyx(window, throwaway, cols);  // Get window dimensions
+    
     // Clear the window and draw border
     werase(window);
     box(window, 0, 0);
     
-    // Draw directory path at top
-    mvwprintw(window, 0, 2, "Directory: %.*s", cols - 13, directory);
+    // Initialize magic for MIME type detection
+    magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
+    if (magic_cookie == NULL || magic_load(magic_cookie, NULL) != 0) {
+        // Fallback to basic directory/file emojis if magic fails
+        for (int i = 0; i < cas->num_lines && (cas->start + i) < cas->num_files; i++) {
+            FileAttr fa = (FileAttr)files_vector->el[cas->start + i];
+            const char *name = FileAttr_get_name(fa);
+            const char *emoji = FileAttr_is_dir(fa) ? "📁" : "📄";
 
-    // Calculate available lines for file entries (subtract 2 for border)
-    int max_entries = lines - 2;
-
-    // Ensure cursor is within bounds
-    fix_cursor(cas);
-
-    // Ensure start is within bounds
-    if (cas->start > cas->num_files - max_entries) {
-        cas->start = cas->num_files > max_entries ? cas->num_files - max_entries : 0;
-    }
-
-    // Ensure start is not negative
-    if (cas->start < 0) {
-        cas->start = 0;
-    }
-
-    // Adjust start to ensure the cursor is visible
-    if (cas->cursor >= cas->start + max_entries) {
-        cas->start = cas->cursor - max_entries + 1;
-    }
-
-    // Determine the range of files to display
-    SIZE end = cas->start + max_entries;
-    if (end > cas->num_files) {
-        end = cas->num_files;
-    }
-
-    // Draw file entries
-    for (SIZE i = cas->start; i < end; i++) {
-        FileAttr current_file = files_vector->el[i];
-        const char *current_name = FileAttr_get_name(current_file);
-        const char *extension = strrchr(current_name, '.');
-        int extension_len = extension ? strlen(extension) : 0;
-
-        // Calculate maximum display length (subtract 4 for border and padding)
-        int max_display_length = cols - 4;
-
-        // Highlight selected entry
-        if (i == cas->cursor)
-            wattron(window, A_REVERSE);
-        if (FileAttr_is_dir(current_file))
-            wattron(window, A_BOLD);
-
-        // Handle long filenames
-        if ((int)strlen(current_name) > max_display_length) {
-            if (extension_len && extension_len + 5 < max_display_length) {
-                // Show start of filename + ... + extension
-                mvwprintw(
-                    window, i - cas->start + 1, 2,
-                    "%.*s... %s",
-                    max_display_length - 4 - extension_len,
-                    current_name,
-                    extension
-                );
-            } else {
-                // Show truncated filename with ...
-                mvwprintw(
-                    window, i - cas->start + 1, 2,
-                    "%.*s...",
-                    max_display_length - 3,
-                    current_name
-                );
+            if ((cas->start + i) == cas->cursor) {
+                wattron(window, A_REVERSE);
             }
-        } else {
-            // Show full filename
-            mvwprintw(window, i - cas->start + 1, 2, "%s", current_name);
+
+            int name_len = strlen(name);
+            int max_name_len = MAX_DISPLAY_LENGTH - 2;
+            if (name_len > max_name_len) {
+                mvwprintw(window, i + 1, 1, "%s %.*s...", emoji, max_name_len - 3, name);
+            } else {
+                mvwprintw(window, i + 1, 1, "%s %s", emoji, name);
+            }
+
+            if ((cas->start + i) == cas->cursor) {
+                wattroff(window, A_REVERSE);
+            }
         }
-
-        // Remove highlighting
-        if (i == cas->cursor)
-            wattroff(window, A_REVERSE);
-        if (FileAttr_is_dir(current_file))
-            wattroff(window, A_BOLD);
-    }
-
-    // Show total count and current position at the bottom
-    if (cas->num_files > 0) {
-        mvwprintw(window, lines - 1, 2, "Item %d of %d", 
-                  cas->cursor + 1, cas->num_files);
     } else {
-        mvwprintw(window, lines - 1, 2, "Directory empty");
+        // Use magic to get proper file type emojis
+        for (int i = 0; i < cas->num_lines && (cas->start + i) < cas->num_files; i++) {
+            FileAttr fa = (FileAttr)files_vector->el[cas->start + i];
+            const char *name = FileAttr_get_name(fa);
+            
+            // Construct full path for MIME type detection
+            char full_path[MAX_PATH_LENGTH];
+            path_join(full_path, directory, name);
+            
+            const char *emoji;
+            if (FileAttr_is_dir(fa)) {
+                emoji = "📁";
+            } else {
+                const char *mime_type = magic_file(magic_cookie, full_path);
+                emoji = get_file_emoji(mime_type);
+            }
+
+            if ((cas->start + i) == cas->cursor) {
+                wattron(window, A_REVERSE);
+            }
+
+            int name_len = strlen(name);
+            int max_name_len = MAX_DISPLAY_LENGTH - 2;
+            if (name_len > max_name_len) {
+                mvwprintw(window, i + 1, 1, "%s %.*s...", emoji, max_name_len - 3, name);
+            } else {
+                mvwprintw(window, i + 1, 1, "%s %s", emoji, name);
+            }
+
+            if ((cas->start + i) == cas->cursor) {
+                wattroff(window, A_REVERSE);
+            }
+        }
+        magic_close(magic_cookie);
     }
 
+    mvwprintw(window, 0, 2, "Directory: %.*s", cols - 13, directory);
     wrefresh(window);
 }
 /** Function to draw the preview window
@@ -794,6 +788,9 @@ void *banner_scrolling_thread(void *arg) {
  */
 int main() {
     // Initialize ncurses
+    setlocale(LC_ALL, "");
+    // Initialize ncurses with wide-character support
+
     initscr();
     noecho();
     cbreak();

@@ -13,6 +13,7 @@
 #include <sys/stat.h>  // for stat, S_ISDIR
 // Local includes
 #include "utils.h"
+#include "files.h"  // Include the header for FileAttr and related functions
 
 #define MAX_PATH_LENGTH 256
 #define MAX_DISPLAY_LENGTH 32
@@ -177,4 +178,41 @@ void path_join(char *result, const char *base, const char *extra) {
     }
 
     result[MAX_PATH_LENGTH - 1] = '\0';
+}
+/**
+ * Function to get an emoji based on the file's MIME type.
+ *
+ * @param mime_type The MIME type of the file.
+ * @return A string representing the emoji.
+ */
+const char* get_file_emoji(const char *mime_type) {
+    if (mime_type == NULL) {
+        return "📄"; // Default file emoji
+    }
+
+    if (strncmp(mime_type, "text/plain", 10) == 0) {
+        return "📄";
+    } else if (strncmp(mime_type, "text/c", 6) == 0) {
+        return "📝";
+    } else if (strncmp(mime_type, "application/json", 16) == 0) {
+        return "🔣";
+    } else if (strncmp(mime_type, "application/xml", 15) == 0) {
+        return "📑";
+    } else if (strncmp(mime_type, "text/x-python", 13) == 0) {
+        return "🐍";
+    } else if (strncmp(mime_type, "text/html", 9) == 0) {
+        return "🌐";
+    } else if (strncmp(mime_type, "image/", 6) == 0) {
+        return "🖼️";
+    } else if (strncmp(mime_type, "video/", 6) == 0) {
+        return "🎞️";
+    } else if (strncmp(mime_type, "audio/", 6) == 0) {
+        return "🎵";
+    } else if (strncmp(mime_type, "application/zip", 15) == 0) {
+        return "📦";
+    } else if (strncmp(mime_type, "text/x-shellscript", 17) == 0) {
+        return "💻";
+    }
+
+    return "📄"; // Default
 }

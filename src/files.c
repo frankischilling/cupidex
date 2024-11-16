@@ -10,7 +10,7 @@
 #include <stdio.h>                 // for snprintf
 #include <sys/stat.h>              // for struct stat, lstat, S_ISDIR
 #include <time.h>                  // for strftime
-#include <curses.h>                // for WINDOW, mvwprintw
+#include <ncurses.h>               // for WINDOW, mvwprintw
 #include <stdbool.h>               // for bool, true, false
 #include <string.h>                // for strcmp
 #include <limits.h>                // For PATH_MAX
@@ -251,44 +251,43 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     if (S_ISDIR(file_stat.st_mode)) {
         long dir_size = get_directory_size(file_path);
         if (dir_size == -2) {
-            mvwprintw(window, 2, 2, "%-*s %s", label_width, "Directory Size:", "Uncalculable");
+            mvwprintw(window, 2, 2, "%-*s %s", label_width, "📁 Directory Size:", "Uncalculable");
         } else {
             char fileSizeStr[20];
             format_file_size(fileSizeStr, dir_size);
-            mvwprintw(window, 2, 2, "%-*s %s", label_width, "Directory Size:", fileSizeStr);
+            mvwprintw(window, 2, 2, "%-*s %s", label_width, "📁 Directory Size:", fileSizeStr);
         }
     } else {
         char fileSizeStr[20];
         format_file_size(fileSizeStr, file_stat.st_size);
-        mvwprintw(window, 2, 2, "%-*s %s", label_width, "File Size:", fileSizeStr);
+        mvwprintw(window, 2, 2, "%-*s %s", label_width, "📄 File Size:", fileSizeStr);
     }
 
     // Display File Permissions
     char permissions[22];
     snprintf(permissions, sizeof(permissions), "%o", file_stat.st_mode & 0777);
-    mvwprintw(window, 3, 2, "%-*s %s", label_width, "File Permissions:", permissions);
+    mvwprintw(window, 3, 2, "%-*s %s", label_width, "🔒 File Permissions:", permissions);
 
     // Display Last Modification Time
     char modTime[50];
     strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
-    mvwprintw(window, 4, 2, "%-*s %.24s", label_width, "Last Modification Time:", modTime);
+    mvwprintw(window, 4, 2, "%-*s %.24s", label_width, "🕒 Last Modification Time:", modTime);
 
     // Display MIME type using libmagic
     magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
     if (magic_cookie == NULL) {
-        mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", "Error initializing magic library");
+        mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", "Error initializing magic library");
         return;
     }
     if (magic_load(magic_cookie, NULL) != 0) {
-        mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", magic_error(magic_cookie));
+        mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", magic_error(magic_cookie));
         magic_close(magic_cookie);
         return;
     }
     const char *mime_type = magic_file(magic_cookie, file_path);
     if (mime_type == NULL) {
-        mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", "Unknown (error)");
+        mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", "Unknown (error)");
     } else {
-        // Define value_width as size_t to match strlen's return type
         size_t value_width = (size_t)(max_x - 2 - label_width - 1); // 2 for left margin, 1 for space
 
         // Truncate MIME type string if it's too long
@@ -296,9 +295,9 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
             char truncated_mime[value_width + 1];
             strncpy(truncated_mime, mime_type, value_width);
             truncated_mime[value_width] = '\0';
-            mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", truncated_mime);
+            mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", truncated_mime);
         } else {
-            mvwprintw(window, 5, 2, "%-*s %s", label_width, "MIME type:", mime_type);
+            mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", mime_type);
         }
     }
     magic_close(magic_cookie);
@@ -335,11 +334,10 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int *start_line, int
 
     // Ensure start_line doesn't go out of bounds
     if (*start_line < 0) *start_line = 0;
-    // Only adjust start_line if content exceeds window height
     if (buffer->num_lines > content_height) {
         *start_line = MIN(*start_line, buffer->num_lines - content_height);
     } else {
-        *start_line = 0;  // Reset to top if file is smaller than window
+        *start_line = 0;
     }
 
     // Draw separator line for line numbers
@@ -347,9 +345,23 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int *start_line, int
         mvwaddch(window, i, label_width + 1, ACS_VLINE);
     }
 
+    // Calculate the width available for text content
+    int content_width = max_x - label_width - 4;  // Subtract borders and line number area
+
+    // Calculate horizontal scroll position to keep cursor visible
+    static int h_scroll = 0;
+    const int scroll_margin = 5;  // Number of columns to keep visible on either side
+
+    // Adjust horizontal scroll if cursor would be outside visible area
+    if (cursor_col >= h_scroll + content_width - scroll_margin) {
+        h_scroll = cursor_col - content_width + scroll_margin + 1;
+    } else if (cursor_col < h_scroll + scroll_margin) {
+        h_scroll = MAX(0, cursor_col - scroll_margin);
+    }
+
     // Display line numbers and content
     for (int i = 0; i < content_height && (*start_line + i) < buffer->num_lines; i++) {
-        // Print line number with right alignment
+        // Print line number (right-aligned in its column)
         mvwprintw(window, i + 1, 2, "%*d", label_width - 1, *start_line + i + 1);
 
         // Calculate the content start position
@@ -357,9 +369,18 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int *start_line, int
 
         // Get the line content
         const char *line = buffer->lines[*start_line + i] ? buffer->lines[*start_line + i] : "";
+        int line_length = strlen(line);
 
-        // Print the line content after the separator
-        mvwprintw(window, i + 1, content_start, "%.*s", max_x - content_start - 2, line);
+        // Print the visible portion of the line
+        if (h_scroll < line_length) {
+            mvwprintw(window, i + 1, content_start, "%.*s", 
+                     content_width,
+                     line + h_scroll);  // Offset the line by h_scroll
+        } else {
+            mvwprintw(window, i + 1, content_start, "%*s", 
+                     content_width,
+                     "");  // Print empty string if line is shorter than content_width
+        }
 
         // If this is the cursor line, highlight the cursor position
         if ((*start_line + i) == cursor_line) {
@@ -367,8 +388,9 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int *start_line, int
             if (cursor_col < (int)strlen(line)) {
                 cursor_char = line[cursor_col];
             }
-
-            wmove(window, i + 1, content_start + cursor_col);
+            
+            // Adjust cursor position for horizontal scroll
+            wmove(window, i + 1, content_start + (cursor_col - h_scroll));
             wattron(window, A_REVERSE);
             waddch(window, cursor_char);
             wattroff(window, A_REVERSE);

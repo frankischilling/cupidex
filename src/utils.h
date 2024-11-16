@@ -17,3 +17,5 @@ void preview_file(const char *filename);
 void change_directory(const char *new_directory, const char ***files, int *num_files, int *selected_entry, int *start_entry, int *end_entry);
 bool is_directory(const char *path, const char *filename);
 void path_join(char *result, const char *base, const char *extra);
+
+const char* get_file_emoji(const char *mime_type);
