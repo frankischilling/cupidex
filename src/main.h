@@ -5,6 +5,7 @@
 #include <time.h>      // For struct timespec
 #include <pthread.h>   // For mutex
 #include <signal.h>    // For sig_atomic_t
+#include "globals.h"
 
 // Global variables
 extern const char *BANNER_TEXT;
@@ -21,6 +22,7 @@ extern volatile sig_atomic_t running;
 // Function declarations
 void draw_scrolling_banner(WINDOW *window, const char *text, const char *build_info, int offset);
 void *banner_scrolling_thread(void *arg);
+
 
 #define BANNER_UPDATE_INTERVAL 250000  // 250ms in microseconds
 

@@ -16,7 +16,7 @@
 #include <limits.h>                // For PATH_MAX
 #include <fcntl.h>                 // For O_RDONLY
 #include <magic.h>                 // For libmagic
-
+#include "globals.h"
 // Local includes
 #include "main.h"                  // for FileAttr, Vector, Vector_add, Vector_len, Vector_set_len
 #include "utils.h"                 // for path_join, is_directory
@@ -304,48 +304,70 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     magic_close(magic_cookie);
 }
 /**
- * Function to check if a file type is supported for preview
+ * Function to render and manage scrolling within the text buffer
  *
- * @param filename the name of the file
- * @return true if the file type is supported, false otherwise
+ * @param window the window to render the text buffer
+ * @param buffer the text buffer containing file contents
+ * @param start_line the starting line number for rendering
+ * @param cursor_line the current cursor line
+ * @param cursor_col the current cursor column
  */
-void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int cursor_line, int cursor_col) {
+void render_text_buffer(WINDOW *window, TextBuffer *buffer, int *start_line, int cursor_line, int cursor_col) {
+    if (!buffer || !buffer->lines) {
+        return;
+    }
     werase(window);
     box(window, 0, 0);
 
     int max_y, max_x;
     getmaxyx(window, max_y, max_x);
+    int content_height = max_y - 2;  // Subtract 2 for borders
 
     // Calculate the width needed for line numbers
-    int line_num_width = snprintf(NULL, 0, "%d", buffer->num_lines) + 1;
-    
+    int label_width = snprintf(NULL, 0, "%d", buffer->num_lines) + 1;
+
+    // Adjust start_line to ensure cursor is visible
+    if (cursor_line < *start_line) {
+        *start_line = cursor_line;
+    } else if (cursor_line >= *start_line + content_height) {
+        *start_line = cursor_line - content_height + 1;
+    }
+
+    // Ensure start_line doesn't go out of bounds
+    if (*start_line < 0) *start_line = 0;
+    // Only adjust start_line if content exceeds window height
+    if (buffer->num_lines > content_height) {
+        *start_line = MIN(*start_line, buffer->num_lines - content_height);
+    } else {
+        *start_line = 0;  // Reset to top if file is smaller than window
+    }
+
     // Draw separator line for line numbers
     for (int i = 1; i < max_y - 1; i++) {
-        mvwaddch(window, i, line_num_width + 2, ACS_VLINE);
+        mvwaddch(window, i, label_width + 1, ACS_VLINE);
     }
 
     // Display line numbers and content
-    for (int i = 0; i < max_y - 2 && (start_line + i) < buffer->num_lines; i++) {
-        const char *line = buffer->lines[start_line + i] ? buffer->lines[start_line + i] : "";
-        
+    for (int i = 0; i < content_height && (*start_line + i) < buffer->num_lines; i++) {
         // Print line number with right alignment
-        mvwprintw(window, i + 1, 2, "%*d", line_num_width - 1, start_line + i + 1);
-        
+        mvwprintw(window, i + 1, 2, "%*d", label_width - 1, *start_line + i + 1);
+
         // Calculate the content start position
-        int content_start = line_num_width + 4;
-        
+        int content_start = label_width + 3;
+
+        // Get the line content
+        const char *line = buffer->lines[*start_line + i] ? buffer->lines[*start_line + i] : "";
+
         // Print the line content after the separator
         mvwprintw(window, i + 1, content_start, "%.*s", max_x - content_start - 2, line);
-        
+
         // If this is the cursor line, highlight the cursor position
-        if ((start_line + i) == cursor_line) {
-            // Get the actual character at cursor position
-            char cursor_char = ' ';  // Default to space if at end of line
+        if ((*start_line + i) == cursor_line) {
+            char cursor_char = ' ';
             if (cursor_col < (int)strlen(line)) {
                 cursor_char = line[cursor_col];
             }
-            
-            // Move to cursor position and highlight the character
+
             wmove(window, i + 1, content_start + cursor_col);
             wattron(window, A_REVERSE);
             waddch(window, cursor_char);
@@ -353,20 +375,18 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int start_line, int 
         }
     }
 
-    // Move cursor to the appropriate position
-    wmove(window, cursor_line - start_line + 1, line_num_width + 4 + cursor_col);
     wrefresh(window);
 }
+
 /**
  * Function to edit a file in the terminal using a text buffer
  *
  * @param window the window to display the file content
  * @param file_path the path to the file to edit
+ * @param notification_window the window to display notifications
  */
 void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notification_window) {
-    // Remove banner scrolling state manipulation
-    // struct timespec prev_scroll_time = last_scroll_time;
-
+    is_editing = 1;
     // Open the file for reading and writing
     int fd = open(file_path, O_RDWR);
     if (fd == -1) {
@@ -430,52 +450,73 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
         text_buffer.lines[text_buffer.num_lines++] = strdup("");
     }
 
-    // Call render_text_buffer to display the initial content
-    render_text_buffer(window, &text_buffer, 0, 0, 0);
-
-    // Enable cursor and allow editing
-    curs_set(1);
-    keypad(window, TRUE);
-    wmove(window, 1, 2);
-
+    // Initialize scrolling variables
     int cursor_line = 0;
     int cursor_col = 0;
     int start_line = 0;
 
+    // Initial rendering
+    render_text_buffer(window, &text_buffer, &start_line, cursor_line, cursor_col);
+
+    // Enable cursor and allow editing
+    curs_set(1);
+    keypad(window, TRUE);
+
     bool exit_edit_mode = false;
-    
+
     // Set window timeout for non-blocking input
     wtimeout(window, 10);  // Short timeout for responsive input
 
     while (!exit_edit_mode) {
         ch = wgetch(window);
-        
+
         if (ch == ERR) {
+            // Check for window resize
+            if (resized) {
+                resized = 0;
+                // Lock mutex to prevent concurrent updates
+                pthread_mutex_lock(&banner_mutex);
+
+                // Get new window dimensions
+                int new_y, new_x;
+                getmaxyx(window, new_y, new_x);
+
+                // Resize the window
+                wresize(window, new_y, new_x);
+
+                // Redraw the window contents
+                render_text_buffer(window, &text_buffer, &start_line, cursor_line, cursor_col);
+
+                // Update other dependent windows if necessary
+                // For example, redraw the directory and preview windows
+                // You might need to pass additional references or use global variables
+
+                // Refresh the window after resizing
+                wrefresh(window);
+
+  
+
+                pthread_mutex_unlock(&banner_mutex);
+            }
             napms(10);
             continue;
-        }
-
+        }   
+        is_editing = 0;
         if (ch == KEY_F(1)) break;
 
-        int max_y;
-        getmaxyx(window, max_y, max_y);
+
+
 
         switch (ch) {
             case KEY_UP:
                 if (cursor_line > 0) {
                     cursor_line--;
-                    if (cursor_line < start_line) {
-                        start_line--;
-                    }
                     cursor_col = MIN(cursor_col, (int)strlen(text_buffer.lines[cursor_line]));
                 }
                 break;
             case KEY_DOWN:
                 if (cursor_line < text_buffer.num_lines - 1) {
                     cursor_line++;
-                    if (cursor_line - start_line >= max_y - 2) {
-                        start_line = cursor_line - (max_y - 3);
-                    }
                     cursor_col = MIN(cursor_col, (int)strlen(text_buffer.lines[cursor_line]));
                 }
                 break;
@@ -485,9 +526,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
                 } else if (cursor_line > 0) {
                     cursor_line--;
                     cursor_col = (int)strlen(text_buffer.lines[cursor_line]);
-                    if (cursor_line < start_line) {
-                        start_line--;
-                    }
                 }
                 break;
             case KEY_RIGHT:
@@ -496,9 +534,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
                 } else if (cursor_line < text_buffer.num_lines - 1) {
                     cursor_line++;
                     cursor_col = 0;
-                    if (cursor_line - start_line >= max_y - 2) {
-                        start_line++;
-                    }
                 }
                 break;
             case '\n': {
@@ -525,9 +560,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
 
                 cursor_line++;
                 cursor_col = 0;
-                if (cursor_line - start_line >= max_y - 2) {
-                    start_line++;
-                }
             }
                 break;
             case KEY_BACKSPACE:
@@ -551,9 +583,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
 
                     cursor_line--;
                     cursor_col = prev_len;
-                    if (cursor_line < start_line) {
-                        start_line--;
-                    }
                 }
                 break;
             case 7:  // Ctrl+G
@@ -603,17 +632,15 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
         }
 
         // Render the updated buffer
-        render_text_buffer(window, &text_buffer, start_line, cursor_line, cursor_col);
+        render_text_buffer(window, &text_buffer, &start_line, cursor_line, cursor_col);
+
     }
 
     fclose(file);
     curs_set(0);
-    
+
     // Restore window timeout to blocking mode
     wtimeout(window, -1);
-    
-    // No need to restore banner state
-    // pthread_mutex_unlock(&banner_mutex);
 
     // Clean up text buffer
     for (int i = 0; i < text_buffer.num_lines; i++) {

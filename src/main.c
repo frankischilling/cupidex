@@ -24,7 +24,7 @@
 #include "files.h"
 #include "vecstack.h"
 #include "main.h"
-
+#include "globals.h"
 #define MAX_PATH_LENGTH 256 // 256
 #define TAB 9
 #define CTRL_E 5
@@ -43,6 +43,7 @@ pthread_mutex_t banner_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Global resize flag
 volatile sig_atomic_t resized = 0;
+volatile sig_atomic_t is_editing = 0;
 
 // Global variables
 WINDOW *notifwin;
@@ -82,12 +83,17 @@ void fix_cursor(CursorAndSlice *cas);
  * @param max_x the maximum number of columns in the window
  */
 void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *line_num, int max_y, int max_x) {
+    // Add a tree preview label before showing the directory contents
+    if (level == 0) {
+        mvwprintw(window, 6, 2, "Directory Tree Preview:");
+        (*line_num)++;  // Increment line number to account for the label
+    }
+
     // Check if the current line number exceeds the window's visible area
     if (*line_num >= max_y - 1) {
         mvwprintw(window, *line_num, 2, "...");
         return;
     }
-
     DIR *dir = opendir(dir_path);
     if (!dir) return;
 
@@ -696,7 +702,9 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
  */
 void handle_winch(int sig) {
     (void)sig;  // Suppress unused parameter warning
-    resized = 1;
+    if (!is_editing) {
+        resized = 1;
+    }
 }
 /**
  * Function to draw and scroll the banner text
@@ -841,7 +849,7 @@ int main() {
     // Set up signal handler for window resize
     struct sigaction sa;
     sa.sa_handler = handle_winch;
-    sa.sa_flags = SA_RESTART;
+    sa.sa_flags = SA_RESTART; // Restart interrupted system calls
     sigemptyset(&sa.sa_mask);
     sigaction(SIGWINCH, &sa, NULL);
 
@@ -891,6 +899,12 @@ int main() {
 
 	int ch;
     while ((ch = getch()) != KEY_F(1)) {
+        if (resized) {
+            resized = 0;
+            redraw_all_windows(&state);
+            continue;
+        }
+
         // Check if enough time has passed to update the banner
         struct timespec current_time;
         clock_gettime(CLOCK_MONOTONIC, &current_time);
