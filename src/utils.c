@@ -11,6 +11,8 @@
 #include <unistd.h>    // for system
 #include <sys/types.h> // for stat
 #include <sys/stat.h>  // for stat, S_ISDIR
+#include <ctype.h>     // for isprint
+
 // Local includes
 #include "utils.h"
 #include "files.h"  // Include the header for FileAttr and related functions
@@ -99,38 +101,70 @@ void display_files(const char *directory) {
  * @param filename the name of the file to preview
  */
 void preview_file(const char *filename) {
+    printf("Attempting to preview file: %s\n", filename);
+    
+    // First check if file exists and is readable
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
         printf("Error: Couldn't open file %s for preview\n", filename);
+        printf("Errno: %d - %s\n", errno, strerror(errno));
         return;
     }
 
+    // Initialize ncurses
     initscr();
+    start_color();
     noecho();
     keypad(stdscr, TRUE);
-
+    raw();
+    
     int ch;
     int row = 0;
     int col = 0;
-
+    int max_rows, max_cols;
+    
+    getmaxyx(stdscr, max_rows, max_cols);
+    
+    // Clear screen and show header
     clear();
-    printw("Previewing file: %s\n", filename);
+    attron(A_BOLD | A_REVERSE);
+    printw("File Preview: %s", filename);
+    attroff(A_BOLD | A_REVERSE);
+    printw("\nPress 'q' to exit, arrow keys to scroll\n\n");
     refresh();
-
-    while ((ch = fgetc(file)) != EOF) {
-        if (ch == '\n') {
-            row++;
-            col = 0;
-        } else {
-            mvaddch(row, col, ch);
-            col++;
+    
+    row = 3;
+    
+    // Read and display file contents
+    char buffer[1024];
+    while (fgets(buffer, sizeof(buffer), file) != NULL) {
+        col = 0;
+        for (int i = 0; buffer[i] != '\0' && col < max_cols - 1; i++) {
+            if (buffer[i] == '\t') {
+                // Handle tabs
+                for (int j = 0; j < 4 && col < max_cols - 1; j++) {
+                    mvaddch(row, col++, ' ');
+                }
+            } else if (isprint(buffer[i]) || buffer[i] == '\n') {
+                // Handle printable characters
+                mvaddch(row, col++, buffer[i]);
+            } else {
+                // Handle non-printable characters
+                mvaddch(row, col++, '?');
+            }
+        }
+        row++;
+        
+        if (row >= max_rows - 1) {
+            break;
         }
     }
-
+    
     refresh();
-
-    getch();  // Wait for user input before closing preview
-
+    
+    // Wait for 'q' to exit
+    while ((ch = getch()) != 'q');
+    
     endwin();
     fclose(file);
 }
@@ -179,6 +213,7 @@ void path_join(char *result, const char *base, const char *extra) {
 
     result[MAX_PATH_LENGTH - 1] = '\0';
 }
+
 /**
  * Function to get an emoji based on the file's MIME type.
  *
@@ -187,32 +222,137 @@ void path_join(char *result, const char *base, const char *extra) {
  */
 const char* get_file_emoji(const char *mime_type) {
     if (mime_type == NULL) {
-        return "📄"; // Default file emoji
-    }
-
-    if (strncmp(mime_type, "text/plain", 10) == 0) {
         return "📄";
-    } else if (strncmp(mime_type, "text/c", 6) == 0) {
-        return "📝";
-    } else if (strncmp(mime_type, "application/json", 16) == 0) {
-        return "🔣";
-    } else if (strncmp(mime_type, "application/xml", 15) == 0) {
-        return "📑";
-    } else if (strncmp(mime_type, "text/x-python", 13) == 0) {
-        return "🐍";
-    } else if (strncmp(mime_type, "text/html", 9) == 0) {
-        return "🌐";
-    } else if (strncmp(mime_type, "image/", 6) == 0) {
-        return "🖼️";
-    } else if (strncmp(mime_type, "video/", 6) == 0) {
-        return "🎞️";
-    } else if (strncmp(mime_type, "audio/", 6) == 0) {
-        return "🎵";
-    } else if (strncmp(mime_type, "application/zip", 15) == 0) {
-        return "📦";
-    } else if (strncmp(mime_type, "text/x-shellscript", 17) == 0) {
-        return "💻";
     }
 
-    return "📄"; // Default
+    // Text files
+    if (strncmp(mime_type, "text/", 5) == 0) {
+        if (strstr(mime_type, "python")) return "🐍";
+        if (strstr(mime_type, "javascript")) return "📜";
+        if (strstr(mime_type, "html")) return "🌐";
+        if (strstr(mime_type, "css")) return "🎨";
+        if (strstr(mime_type, "x-c")) return "📝";
+        if (strstr(mime_type, "x-java")) return "☕";
+        if (strstr(mime_type, "x-shellscript")) return "💻";
+        if (strstr(mime_type, "x-rust")) return "🦀";
+        if (strstr(mime_type, "markdown")) return "📘";
+        if (strstr(mime_type, "csv")) return "📊";
+        if (strstr(mime_type, "x-perl")) return "🐪";
+        if (strstr(mime_type, "x-ruby")) return "💎";
+        if (strstr(mime_type, "x-php")) return "🐘";
+        if (strstr(mime_type, "x-go")) return "🐹";
+        if (strstr(mime_type, "x-swift")) return "🦅";
+        if (strstr(mime_type, "x-kotlin")) return "🎯";
+        if (strstr(mime_type, "x-scala")) return "⚡";
+        if (strstr(mime_type, "x-haskell")) return "λ";
+        if (strstr(mime_type, "x-lua")) return "🌙";
+        if (strstr(mime_type, "x-r")) return "📊";
+        
+        // Data formats
+        if (strstr(mime_type, "json")) return "🔣";
+        if (strstr(mime_type, "xml")) return "📑";
+        if (strstr(mime_type, "yaml")) return "📋";
+        if (strstr(mime_type, "toml")) return "⚙️";
+        if (strstr(mime_type, "ini")) return "🔧";
+        return "📄";
+    }
+
+    // Images
+    if (strncmp(mime_type, "image/", 6) == 0) {
+        if (strstr(mime_type, "gif")) return "🎭";
+        if (strstr(mime_type, "svg")) return "✨";
+        if (strstr(mime_type, "png")) return "🖼️";
+        if (strstr(mime_type, "jpeg") || strstr(mime_type, "jpg")) return "📸";
+        if (strstr(mime_type, "webp")) return "🌅";
+        if (strstr(mime_type, "tiff")) return "📷";
+        if (strstr(mime_type, "bmp")) return "🎨";
+        if (strstr(mime_type, "ico")) return "🎯";
+        return "🖼️";
+    }
+
+    // Audio
+    if (strncmp(mime_type, "audio/", 6) == 0) {
+        if (strstr(mime_type, "midi")) return "🎹";
+        if (strstr(mime_type, "mp3")) return "🎵";
+        if (strstr(mime_type, "wav")) return "🔊";
+        if (strstr(mime_type, "ogg")) return "🎼";
+        if (strstr(mime_type, "flac")) return "🎶";
+        if (strstr(mime_type, "aac")) return "🔉";
+        return "🎵";
+    }
+
+    // Video
+    if (strncmp(mime_type, "video/", 6) == 0) {
+        if (strstr(mime_type, "mp4")) return "🎥";
+        if (strstr(mime_type, "avi")) return "📽️";
+        if (strstr(mime_type, "mkv")) return "🎬";
+        if (strstr(mime_type, "webm")) return "▶️";
+        if (strstr(mime_type, "mov")) return "🎦";
+        if (strstr(mime_type, "wmv")) return "📹";
+        return "🎞️";
+    }
+
+    // Applications
+    if (strncmp(mime_type, "application/", 12) == 0) {
+        // Archives
+        if (strstr(mime_type, "zip")) return "📦";
+        if (strstr(mime_type, "x-tar")) return "📦";
+        if (strstr(mime_type, "x-rar")) return "📦";
+        if (strstr(mime_type, "x-7z")) return "📦";
+        if (strstr(mime_type, "gzip")) return "📦";
+        if (strstr(mime_type, "x-bzip")) return "📦";
+        if (strstr(mime_type, "x-xz")) return "📦";
+        if (strstr(mime_type, "x-compress")) return "📦";
+
+        // Documents
+        if (strstr(mime_type, "pdf")) return "📕";
+        if (strstr(mime_type, "msword")) return "📝";
+        if (strstr(mime_type, "vnd.ms-excel")) return "📊";
+        if (strstr(mime_type, "vnd.ms-powerpoint")) return "📊";
+        if (strstr(mime_type, "vnd.oasis.opendocument.text")) return "📃";
+        if (strstr(mime_type, "rtf")) return "📄";
+        if (strstr(mime_type, "epub")) return "📚";
+        if (strstr(mime_type, "js")) return "📜";
+
+        // Data formats
+        if (strstr(mime_type, "json")) return "🔣";
+        if (strstr(mime_type, "xml")) return "📑";
+        if (strstr(mime_type, "yaml")) return "📋";
+        if (strstr(mime_type, "sql")) return "🗄️";
+        
+        // Executables and binaries
+        if (strstr(mime_type, "x-executable")) return "⚙️";
+        if (strstr(mime_type, "x-sharedlib")) return "🔧";
+        if (strstr(mime_type, "x-object")) return "🔨";
+        if (strstr(mime_type, "x-pie-executable")) return "🎯";
+        if (strstr(mime_type, "x-dex")) return "🤖";
+        if (strstr(mime_type, "java-archive")) return "☕";
+        if (strstr(mime_type, "x-msdownload")) return "🪟";
+    }
+
+    // Font files
+    if (strncmp(mime_type, "font/", 5) == 0) {
+        if (strstr(mime_type, "ttf")) return "🔤";
+        if (strstr(mime_type, "otf")) return "🔠";
+        if (strstr(mime_type, "woff")) return "🔡";
+        if (strstr(mime_type, "woff2")) return "🔣";
+        return "🔤";
+    }
+
+    // Database files
+    if (strstr(mime_type, "database") || strstr(mime_type, "sql")) {
+        return "🗄️";
+    }
+
+    // Version control
+    if (strstr(mime_type, "x-git")) {
+        return "📥";
+    }
+
+    // Certificate files
+    if (strstr(mime_type, "x-x509-ca-cert")) {
+        return "🔐";
+    }
+
+    return "📄";
 }

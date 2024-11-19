@@ -30,26 +30,33 @@
 
 // Supported MIME types
 const char *supported_mime_types[] = {
-        "text/plain",             // Plain text files
-        "text/x-c",               // C source files
-        "application/json",       // JSON files
-        "application/xml",        // XML files
-        "text/x-shellscript",     // Shell scripts
-        "text/x-python",          // Python source files
-        "text/x-java-source",     // Java source files
-        "text/html",              // HTML files
-        "text/css",               // CSS files
-        "text/x-c++src",          // C++ source files
-        "application/x-yaml",     // YAML files
-        "application/x-sh",       // Shell scripts
-        "application/x-perl",     // Perl scripts
-        "application/x-php",      // PHP scripts
-        "text/x-rustsrc",         // Rust source files
-        "text/x-go",              // Go source files
-        "text/x-swift",           // Swift source files
-        "text/x-kotlin",          // Kotlin source files
-        "text/x-makefile",        // Makefile files
-};  
+    "text/plain",               // Plain text files
+    "text/x-c",                 // C source files
+    "application/json",         // JSON files
+    "application/xml",          // XML files
+    "text/x-shellscript",       // Shell scripts
+    "text/x-python",            // Python source files (common)
+    "text/x-script.python",     // Python source files (alternative)
+    "text/x-java-source",       // Java source files
+    "text/html",                // HTML files
+    "text/css",                 // CSS files
+    "text/x-c++src",            // C++ source files
+    "application/x-yaml",       // YAML files
+    "application/x-sh",         // Shell scripts
+    "application/x-perl",       // Perl scripts
+    "application/x-php",        // PHP scripts
+    "text/x-rustsrc",           // Rust source files
+    "text/x-go",                // Go source files
+    "text/x-swift",             // Swift source files
+    "text/x-kotlin",            // Kotlin source files
+    "text/x-makefile",          // Makefile files
+    "text/x-script.*",          // Generic scripting files
+    "text/javascript",          // JavaScript files
+    "application/javascript",   // Alternative JavaScript MIME type
+    "application/x-javascript", // Another JavaScript MIME type
+    "text/x-javascript",        // Legacy JavaScript MIME type
+    "text/x-*",                 // Any text-based x- files
+};
 
 size_t num_supported_mime_types = sizeof(supported_mime_types) / sizeof(supported_mime_types[0]);
 // FileAttributes structure
@@ -274,8 +281,7 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     mvwprintw(window, 4, 2, "%-*s %.24s", label_width, "🕒 Last Modification Time:", modTime);
 
     // Display MIME type using libmagic
-    magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
-    if (magic_cookie == NULL) {
+    magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_SYMLINK | MAGIC_CHECK);    if (magic_cookie == NULL) {
         mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", "Error initializing magic library");
         return;
     }
@@ -681,8 +687,8 @@ bool is_supported_file_type(const char *filename) {
     magic_t magic_cookie;
     bool supported = false;
 
-    // Open a magic cookie for checking MIME types
-    magic_cookie = magic_open(MAGIC_MIME_TYPE);
+    // Open magic cookie with additional flags for better MIME detection
+    magic_cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_SYMLINK | MAGIC_CHECK);
     if (magic_cookie == NULL) {
         fprintf(stderr, "Unable to initialize magic library\n");
         return false;
@@ -703,15 +709,20 @@ bool is_supported_file_type(const char *filename) {
         return false;
     }
 
-    // Check if MIME type is in supported types
-    for (size_t i = 0; i < num_supported_mime_types; i++) {
-        if (strcmp(mime_type, supported_mime_types[i]) == 0) {
-            supported = true;
-            break;
+    // Also check file extension for .js files specifically
+    const char *ext = strrchr(filename, '.');
+    if (ext && strcmp(ext, ".js") == 0) {
+        supported = true;
+    } else {
+        // Check if MIME type is in supported types
+        for (size_t i = 0; i < num_supported_mime_types; i++) {
+            if (strncmp(mime_type, supported_mime_types[i], strlen(supported_mime_types[i])) == 0) {
+                supported = true;
+                break;
+            }
         }
     }
 
-    // Clean up
     magic_close(magic_cookie);
     return supported;
 }

@@ -92,8 +92,8 @@ void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *l
         (*line_num)++;
     }
 
+    // Early exit if we're already past visible area
     if (*line_num >= max_y - 1) {
-        mvwprintw(window, *line_num, 2, "...");
         return;
     }
 
@@ -103,66 +103,102 @@ void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *l
     struct dirent *entry;
     struct stat statbuf;
     char full_path[MAX_PATH_LENGTH];
-    char truncated_path[MAX_PATH_LENGTH];
-    bool truncated = false;
+    size_t dir_path_len = strlen(dir_path);
 
-    // Initialize magic for MIME type detection
-    magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
-    if (magic_cookie == NULL || magic_load(magic_cookie, NULL) != 0) {
-        magic_close(magic_cookie);
-        return;
-    }
+    // Define window size for entries
+    const int WINDOW_SIZE = 50; // Maximum entries to process at once
+    const int VISIBLE_ENTRIES = max_y - *line_num - 1; // Available lines in window
+    const int MAX_ENTRIES = MIN(WINDOW_SIZE, VISIBLE_ENTRIES);
 
-    int current_line = *line_num;
+    struct {
+        char name[MAX_PATH_LENGTH];
+        bool is_dir;
+        mode_t mode;
+    } entries[WINDOW_SIZE];
+    int entry_count = 0;
 
-    // Iterate through directory entries
-    while ((entry = readdir(dir)) != NULL) {
+    // Only collect entries that will be visible
+    while ((entry = readdir(dir)) != NULL && entry_count < MAX_ENTRIES) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
 
-        // Skip entries that are not visible
-        if (current_line >= max_y - 1) {
-            mvwprintw(window, current_line, 2, "...");
-            break;
-        }
+        size_t name_len = strlen(entry->d_name);
+        if (dir_path_len + name_len + 2 > MAX_PATH_LENGTH) continue;
 
-        int result = snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
-        if (result < 0 || result >= (int)sizeof(full_path)) {
-            truncated = true;
-            snprintf(truncated_path, sizeof(truncated_path), "%.*s...", MAX_PATH_LENGTH - 4, full_path);
-        } else {
-            truncated = false;
-            strncpy(truncated_path, full_path, sizeof(truncated_path) - 1);
-            truncated_path[sizeof(truncated_path) - 1] = '\0';
+        strcpy(full_path, dir_path);
+        if (full_path[dir_path_len - 1] != '/') {
+            strcat(full_path, "/");
         }
+        strcat(full_path, entry->d_name);
 
         if (lstat(full_path, &statbuf) == -1) continue;
 
-        // Determine emoji based on file type
-        const char *emoji = "📄"; // Default file emoji
-        if (S_ISDIR(statbuf.st_mode)) {
-            emoji = "📁";
-        } else {
-            const char *mime_type = magic_file(magic_cookie, full_path);
-            if (mime_type) {
-                emoji = get_file_emoji(mime_type);
-            }
-        }
-
-        const char *display_name = truncated ? "[Path too long]" : entry->d_name;
-        mvwprintw(window, current_line++, 2 + level * 2, "%s %.*s", emoji, max_x - 4 - level * 2, display_name);
-
-        char perm[10];
-        snprintf(perm, sizeof(perm), "%o", statbuf.st_mode & 0777);
-        mvwprintw(window, current_line - 1, max_x - 10, "%s", perm);
-
-        if (S_ISDIR(statbuf.st_mode)) {
-            show_directory_tree(window, truncated_path, level + 1, &current_line, max_y, max_x);
+        // Only store if it will be visible
+        if (*line_num + entry_count < max_y - 1) {
+            strncpy(entries[entry_count].name, entry->d_name, MAX_PATH_LENGTH - 1);
+            entries[entry_count].name[MAX_PATH_LENGTH - 1] = '\0';
+            entries[entry_count].is_dir = S_ISDIR(statbuf.st_mode);
+            entries[entry_count].mode = statbuf.st_mode;
+            entry_count++;
         }
     }
     closedir(dir);
-    magic_close(magic_cookie);
 
-    *line_num = current_line;
+    // Initialize magic only if we have entries to display
+    magic_t magic_cookie = NULL;
+    if (entry_count > 0) {
+        magic_cookie = magic_open(MAGIC_MIME_TYPE);
+        if (magic_cookie != NULL) {
+            magic_load(magic_cookie, NULL);
+        }
+    }
+
+    // Display collected entries
+    for (int i = 0; i < entry_count && *line_num < max_y - 1; i++) {
+        const char *emoji;
+        if (entries[i].is_dir) {
+            emoji = "📁";
+        } else if (magic_cookie) {
+            size_t name_len = strlen(entries[i].name);
+            if (dir_path_len + name_len + 2 <= MAX_PATH_LENGTH) {
+                strcpy(full_path, dir_path);
+                if (full_path[dir_path_len - 1] != '/') {
+                    strcat(full_path, "/");
+                }
+                strcat(full_path, entries[i].name);
+                const char *mime_type = magic_file(magic_cookie, full_path);
+                emoji = get_file_emoji(mime_type);
+            } else {
+                emoji = "📄";
+            }
+        } else {
+            emoji = "📄";
+        }
+
+        mvwprintw(window, *line_num, 2 + level * 2, "%s %.*s", 
+                  emoji, max_x - 4 - level * 2, entries[i].name);
+
+        char perm[10];
+        snprintf(perm, sizeof(perm), "%o", entries[i].mode & 0777);
+        mvwprintw(window, *line_num, max_x - 10, "%s", perm);
+        (*line_num)++;
+
+        // Only recurse into directories if we have space
+        if (entries[i].is_dir && *line_num < max_y - 1) {
+            size_t name_len = strlen(entries[i].name);
+            if (dir_path_len + name_len + 2 <= MAX_PATH_LENGTH) {
+                strcpy(full_path, dir_path);
+                if (full_path[dir_path_len - 1] != '/') {
+                    strcat(full_path, "/");
+                }
+                strcat(full_path, entries[i].name);
+                show_directory_tree(window, full_path, level + 1, line_num, max_y, max_x);
+            }
+        }
+    }
+
+    if (magic_cookie) {
+        magic_close(magic_cookie);
+    }
 }
 /** Function to update the directory stack with the new directory
  *
@@ -251,7 +287,7 @@ void draw_directory_window(
             }
 
             int name_len = strlen(name);
-            int max_name_len = MAX_DISPLAY_LENGTH - 2;
+            int max_name_len = cols - 4; // Adjusted to fit within window width
             if (name_len > max_name_len) {
                 mvwprintw(window, i + 1, 1, "%s %.*s...", emoji, max_name_len - 3, name);
             } else {
@@ -285,7 +321,7 @@ void draw_directory_window(
             }
 
             int name_len = strlen(name);
-            int max_name_len = MAX_DISPLAY_LENGTH - 2;
+            int max_name_len = cols - 4; // Adjusted to fit within window width
             if (name_len > max_name_len) {
                 mvwprintw(window, i + 1, 1, "%s %.*s...", emoji, max_name_len - 3, name);
             } else {

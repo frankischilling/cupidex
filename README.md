@@ -69,6 +69,7 @@ Note: Some terminal emulators like Alacritty, iTerm2, or Windows Terminal provid
 - [ ] Fix directory preview not scrolling 
 - [ ] Write custom magic library for in-house MIME type detection
 - [ ] Add text display on tree preview when user enters a empty dir
+- [ ] Fallback to extension-based detection for MIME type
 ## Edit Mode Issues
 - [ ] Banner notification not rotating correctly when rotating when in edit mode
 - [ ] Fix sig winch handling breaking while in edit mode
