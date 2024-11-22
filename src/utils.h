@@ -18,4 +18,4 @@ void change_directory(const char *new_directory, const char ***files, int *num_f
 bool is_directory(const char *path, const char *filename);
 void path_join(char *result, const char *base, const char *extra);
 
-const char* get_file_emoji(const char *mime_type);
+const char* get_file_emoji(const char *mime_type, const char *filename);

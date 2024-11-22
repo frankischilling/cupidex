@@ -16,14 +16,6 @@ cd ~/.local/share/fonts
 curl -fLO https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/JetBrainsMono.zip
 unzip JetBrainsMono.zip
 fc-cache -fv
-
-# On macOS with Homebrew:
-brew tap homebrew/cask-fonts
-brew install --cask font-jetbrains-mono-nerd-font
-
-# On Windows:
-# Download JetBrainsMono.zip from https://github.com/ryanoasis/nerd-fonts/releases
-# Extract and install fonts through the Font Settings
 ```
 
 2. Configure your terminal:
@@ -55,55 +47,95 @@ Note: Some terminal emulators like Alacritty, iTerm2, or Windows Terminal provid
   - 📑 XML files
   - 🐍 Python files
   - 🌐 HTML files
-  - 🖼️ Image files
-  - 🎞️ Video files
-  - 🎵 Audio files
-  - 📦 Archive files
+  - 🎨 CSS files
+  - ☕ Java files
   - 💻 Shell scripts
-- Command-line interface with basic file operations
+  - 🦀 Rust files
+  - 📘 Markdown files
+  - 📊 CSV files
+  - 🐪 Perl files
+  - 💎 Ruby files
+  - 🐘 PHP files
+  - 🐹 Go files
+  - 🦅 Swift files
+  - 🎯 Kotlin files
+  - ⚡ Scala files
+  - 🌙 Lua files
+  - 📦 Archive files
+- Text editing capabilities within the terminal
+- Directory tree visualization with permissions
+- File information display (size, permissions, modification time)
+- Scrollable preview window
+- Tab-based window switching between directory and preview panes
 
 ## Todo
 
 ### High Priority
-- [ ] Fix directory list not staying within the border
 - [ ] Fix directory preview not scrolling 
 - [ ] Write custom magic library for in-house MIME type detection
-- [ ] Add text display on tree preview when user enters a empty dir
-- [ ] Fallback to extension-based detection for MIME type
-## Edit Mode Issues
-- [ ] Banner notification not rotating correctly when rotating when in edit mode
+- [ ] Add text display on tree preview when user enters an empty dir
+- [ ] Implement proper memory management and cleanup for file attributes and vectors
+- [ ] Add error handling for failed memory allocations
+- [ ] Optimize file loading performance for large directories
+
+### Edit Mode Issues
+- [ ] Banner notification not rotating correctly when rotating in edit mode
 - [ ] Fix sig winch handling breaking while in edit mode
 - [ ] Fix cursor showing up at the bottom of the text editing buffer
-- [ ] Fix text buffer not scrolling to the right when typing and hitting the border of the window, it will just go invisible
+- [ ] Fix text buffer not scrolling to the right when typing and hitting the border of the window
+- [ ] Add undo/redo functionality in edit mode
+- [ ] Implement proper text selection in edit mode
 
 ### Features
 - [ ] Enable scrolling for tree preview in the preview window when tabbed over
 - [ ] Add preview support for `.zip` and `.tar` files
 - [ ] Implement syntax highlighting for supported file types
 - [ ] Display symbolic links with correct arrow notation (e.g., `->` showing the target path)
-- [ ] In text editing buffer implement shortcuts (shift+arrow to select, ctrl+arrow for faster selection)
-- [ ] More text editing shortcuts (ctrl+x, ctrl+c, ctrl+v, eg..)
-- [ ] Add a **easy select** feature for selecting file names, dir names, and current directory
-- [ ] Implement copy and paste shortcuts with easy select for files/directories
+- [ ] Implement text editing shortcuts:
+  - [ ] Shift+arrow for selection
+  - [ ] Ctrl+arrow for faster cursor movement
+  - [ ] Standard shortcuts (Ctrl+X, Ctrl+C, Ctrl+V)
+- [ ] Add file operations:
+  - [ ] Copy/paste files and directories
+  - [ ] Create new file/directory
+  - [ ] Delete file/directory
+  - [ ] Rename file/directory
+- [ ] Add a quick select feature for selecting file names, dir names, and current directory
+- [ ] Implement file search functionality
+- [ ] Add file filtering options
+- [ ] Implement file/directory permissions editing
+- [ ] Add configuration file support for customizing:
+  - [ ] Key bindings
+  - [ ] Color schemes
+  - [ ] Default text editor
+  - [ ] File associations
+
+### Performance Improvements
+- [ ] Implement lazy loading for large directories
+- [ ] Optimize memory usage for file preview
+- [ ] Cache directory contents for faster navigation
+- [ ] Improve MIME type detection performance
+- [ ] Implement background loading for directory contents
 
 ### Completed
+- [X] Fallback to extension-based detection instead of MIME type when detection fails
+- [X] Fix directory list not staying within the border
 - [X] Implement directory tree preview for directories
 - [X] Fix weird crash on different window resize
 - [X] Fix text buffer from breaking the preview win border
 - [X] Fix issue with title banner notif rotating showing char when rotating from left side to right
-- [X] Fix inputs being over loaded and taking awhile to execute (input delay when scrolling)
-- [X] Add build ver, and name somewhere
-- [X] Add cursor highlighting to text editing buffer and make it more precise 
+- [X] Fix inputs being overloaded and taking awhile to execute
+- [X] Add build version and name display
+- [X] Add cursor highlighting to text editing buffer
 - [X] Add line numbers to text editing buffer
-- [X] Not updating preview window on directory enter and leave
-- [X] File item list
-- [X] Fix directory list being too big so it would be cut off
-- [X] Fix crashing when trying to edit a too small of file
+- [X] Fix preview window not updating on directory enter and leave
+- [X] Implement proper file item list
+- [X] Fix directory list being too big and getting cut off
+- [X] Fix crashing when trying to edit too small of a file
 - [X] Add support for sig winch handling
-- [X] Fix being able to enter directory before calculation is done causing a empty directory and a broken file path
-- [X] Add dir window scrolling up and down when hitting bottom/top
-- [X] Add tree structure visualization with folder (📁) and file (📄) icons, proper indentation, and smooth scrolling behavior similar to the file preview functionality
-- [ ] Push to main branch
+- [X] Fix being able to enter directory before calculation is done
+- [X] Add directory window scrolling
+- [X] Add tree structure visualization with proper icons and indentation
 
 ## Prerequisites
 
@@ -160,13 +192,17 @@ This will start CupidFM. Error logs will be saved in `log.txt`.
 
 ## Usage
 
-Use the arrow keys to navigate the directory structure:
-- **Up/Down**: Move between files
-- **Left/Right**: Navigate to parent/child directories
-- **F1**: Exit the application
-- **TAB**: Change between preview and directory window
-  - **CONTROL+E**: While in the preview window, you can edit within the file
-  - **CONTROL+S**: Save files you are editing within the terminal 
+- **Navigation**:
+  - **Up/Down**: Move between files
+  - **Left/Right**: Navigate to parent/child directories
+  - **F1**: Exit the application
+  - **TAB**: Switch between directory and preview windows
+  - **CONTROL+E**: Edit file in preview window
+  - **CONTROL+G**: Save file while editing
+
+- **Preview Window**:
+  - Up/Down arrows to scroll through file content
+  - Supports various file types with syntax-appropriate emoji indicators
 
 ## Contributing
 

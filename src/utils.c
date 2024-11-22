@@ -220,12 +220,12 @@ void path_join(char *result, const char *base, const char *extra) {
  * @param mime_type The MIME type of the file.
  * @return A string representing the emoji.
  */
-const char* get_file_emoji(const char *mime_type) {
+const char* get_file_emoji(const char *mime_type, const char *filename) {
     if (mime_type == NULL) {
         return "📄";
     }
 
-    // Text files
+    // Check for specific MIME types first
     if (strncmp(mime_type, "text/", 5) == 0) {
         if (strstr(mime_type, "python")) return "🐍";
         if (strstr(mime_type, "javascript")) return "📜";
@@ -254,7 +254,38 @@ const char* get_file_emoji(const char *mime_type) {
         if (strstr(mime_type, "yaml")) return "📋";
         if (strstr(mime_type, "toml")) return "⚙️";
         if (strstr(mime_type, "ini")) return "🔧";
-        return "📄";
+    }
+
+    // Fallback to extension-based detection if MIME type is "text/plain"
+    if (strcmp(mime_type, "text/plain") == 0) {
+        const char *ext = strrchr(filename, '.');
+        if (ext) {
+            if (strcmp(ext, ".js") == 0) return "📜";
+            if (strcmp(ext, ".py") == 0) return "🐍";
+            if (strcmp(ext, ".html") == 0) return "🌐";
+            if (strcmp(ext, ".css") == 0) return "🎨";
+            if (strcmp(ext, ".c") == 0 || strcmp(ext, ".h") == 0) return "📝";
+            if (strcmp(ext, ".java") == 0) return "☕";
+            if (strcmp(ext, ".sh") == 0) return "💻";
+            if (strcmp(ext, ".rs") == 0) return "🦀";
+            if (strcmp(ext, ".md") == 0) return "📘";
+            if (strcmp(ext, ".csv") == 0) return "📊";
+            if (strcmp(ext, ".pl") == 0) return "🐪";
+            if (strcmp(ext, ".rb") == 0) return "💎";
+            if (strcmp(ext, ".php") == 0) return "🐘";
+            if (strcmp(ext, ".go") == 0) return "🐹";
+            if (strcmp(ext, ".swift") == 0) return "🦅";
+            if (strcmp(ext, ".kt") == 0) return "🎯";
+            if (strcmp(ext, ".scala") == 0) return "⚡";
+            if (strcmp(ext, ".hs") == 0) return "λ";
+            if (strcmp(ext, ".lua") == 0) return "🌙";
+            if (strcmp(ext, ".r") == 0) return "📊";
+            if (strcmp(ext, ".json") == 0) return "🔣";
+            if (strcmp(ext, ".xml") == 0) return "📑";
+            if (strcmp(ext, ".yaml") == 0 || strcmp(ext, ".yml") == 0) return "📋";
+            if (strcmp(ext, ".toml") == 0) return "⚙️";
+            if (strcmp(ext, ".ini") == 0) return "🔧";
+        }
     }
 
     // Images
@@ -352,6 +383,36 @@ const char* get_file_emoji(const char *mime_type) {
     // Certificate files
     if (strstr(mime_type, "x-x509-ca-cert")) {
         return "🔐";
+    }
+
+    // Fallback to extension-based detection
+    const char *ext = strrchr(filename, '.');
+    if (ext) {
+        if (strcmp(ext, ".py") == 0) return "🐍";
+        if (strcmp(ext, ".js") == 0) return "📜";
+        if (strcmp(ext, ".html") == 0) return "🌐";
+        if (strcmp(ext, ".css") == 0) return "🎨";
+        if (strcmp(ext, ".c") == 0 || strcmp(ext, ".h") == 0) return "📝";
+        if (strcmp(ext, ".java") == 0) return "☕";
+        if (strcmp(ext, ".sh") == 0) return "💻";
+        if (strcmp(ext, ".rs") == 0) return "🦀";
+        if (strcmp(ext, ".md") == 0) return "📘";
+        if (strcmp(ext, ".csv") == 0) return "📊";
+        if (strcmp(ext, ".pl") == 0) return "🐪";
+        if (strcmp(ext, ".rb") == 0) return "💎";
+        if (strcmp(ext, ".php") == 0) return "🐘";
+        if (strcmp(ext, ".go") == 0) return "🐹";
+        if (strcmp(ext, ".swift") == 0) return "🦅";
+        if (strcmp(ext, ".kt") == 0) return "🎯";
+        if (strcmp(ext, ".scala") == 0) return "⚡";
+        if (strcmp(ext, ".hs") == 0) return "λ";
+        if (strcmp(ext, ".lua") == 0) return "🌙";
+        if (strcmp(ext, ".r") == 0) return "📊";
+        if (strcmp(ext, ".json") == 0) return "🔣";
+        if (strcmp(ext, ".xml") == 0) return "📑";
+        if (strcmp(ext, ".yaml") == 0 || strcmp(ext, ".yml") == 0) return "📋";
+        if (strcmp(ext, ".toml") == 0) return "⚙️";
+        if (strcmp(ext, ".ini") == 0) return "🔧";
     }
 
     return "📄";

@@ -166,7 +166,7 @@ void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *l
                 }
                 strcat(full_path, entries[i].name);
                 const char *mime_type = magic_file(magic_cookie, full_path);
-                emoji = get_file_emoji(mime_type);
+                emoji = get_file_emoji(mime_type, entries[i].name);
             } else {
                 emoji = "📄";
             }
@@ -313,7 +313,7 @@ void draw_directory_window(
                 emoji = "📁";
             } else {
                 const char *mime_type = magic_file(magic_cookie, full_path);
-                emoji = get_file_emoji(mime_type);
+                emoji = get_file_emoji(mime_type, name);
             }
 
             if ((cas->start + i) == cas->cursor) {
