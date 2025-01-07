@@ -365,22 +365,22 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
         mvwprintw(window, 2, 2, "Unable to retrieve file information");
         return;
     }
-
-    // Display file size
+    
+    // Display file size with emoji
     char fileSizeStr[20];
     format_file_size(fileSizeStr, file_stat.st_size);
-    mvwprintw(window, 2, 2, "File Size: %s", fileSizeStr);
+    mvwprintw(window, 2, 2, "📏 File Size: %s", fileSizeStr);
 
-    // Display file permissions
+    // Display file permissions with emoji
     char permissions[10];
     snprintf(permissions, sizeof(permissions), "%o", file_stat.st_mode & 0777);
-    mvwprintw(window, 3, 2, "Permissions: %s", permissions);
+    mvwprintw(window, 3, 2, "🔒 Permissions: %s", permissions);
 
-    // Display last modification time
+    // Display last modification time with emoji
     char modTime[50];
     strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
-    mvwprintw(window, 4, 2, "Last Modified: %s", modTime);
-
+    mvwprintw(window, 4, 2, "🕒 Last Modified: %s", modTime);
+    
     // Display MIME type using libmagic
     magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
     if (magic_cookie != NULL && magic_load(magic_cookie, NULL) == 0) {

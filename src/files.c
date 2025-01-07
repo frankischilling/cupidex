@@ -267,21 +267,12 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     } else {
         char fileSizeStr[20];
         format_file_size(fileSizeStr, file_stat.st_size);
-        mvwprintw(window, 2, 2, "%-*s %s", label_width, "📄 File Size:", fileSizeStr);
+        mvwprintw(window, 2, 2, "%-*s %s", label_width, "📏 File Size:", fileSizeStr); // Updated with emoji
     }
 
-    // Display File Permissions
-    char permissions[22];
-    snprintf(permissions, sizeof(permissions), "%o", file_stat.st_mode & 0777);
-    mvwprintw(window, 3, 2, "%-*s %s", label_width, "🔒 File Permissions:", permissions);
-
-    // Display Last Modification Time
-    char modTime[50];
-    strftime(modTime, sizeof(modTime), "%c", localtime(&file_stat.st_mtime));
-    mvwprintw(window, 4, 2, "%-*s %.24s", label_width, "🕒 Last Modification Time:", modTime);
-
     // Display MIME type using libmagic
-    magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_SYMLINK | MAGIC_CHECK);    if (magic_cookie == NULL) {
+    magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_SYMLINK | MAGIC_CHECK);
+    if (magic_cookie == NULL) {
         mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", "Error initializing magic library");
         return;
     }
@@ -291,6 +282,7 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
         return;
     }
     const char *mime_type = magic_file(magic_cookie, file_path);
+    const char *emoji = get_file_emoji(mime_type, file_path);
     if (mime_type == NULL) {
         mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", "Unknown (error)");
     } else {
@@ -301,9 +293,9 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
             char truncated_mime[value_width + 1];
             strncpy(truncated_mime, mime_type, value_width);
             truncated_mime[value_width] = '\0';
-            mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", truncated_mime);
+            mvwprintw(window, 5, 2, "%-*s %s %s", label_width, emoji, "MIME type:", truncated_mime);
         } else {
-            mvwprintw(window, 5, 2, "%-*s %s", label_width, "📂 MIME type:", mime_type);
+            mvwprintw(window, 5, 2, "%-*s %s %s", label_width, emoji, "MIME type:", mime_type);
         }
     }
     magic_close(magic_cookie);

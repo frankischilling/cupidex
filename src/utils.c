@@ -292,7 +292,7 @@ const char* get_file_emoji(const char *mime_type, const char *filename) {
     if (strncmp(mime_type, "image/", 6) == 0) {
         if (strstr(mime_type, "gif")) return "🎭";
         if (strstr(mime_type, "svg")) return "✨";
-        if (strstr(mime_type, "png")) return "🖼️";
+        if (strstr(mime_type, "png")) return "🖼️ ";
         if (strstr(mime_type, "jpeg") || strstr(mime_type, "jpg")) return "📸";
         if (strstr(mime_type, "webp")) return "🌅";
         if (strstr(mime_type, "tiff")) return "📷";
