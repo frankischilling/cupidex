@@ -2,6 +2,8 @@
 
 CupidFM is a terminal-based file manager implemented in C. It uses the `ncurses` library for the user interface, providing features like directory navigation, directory tree preview, file preview, file editing, and file information display. 
 
+![preview](img/preview.png)
+
 ### Terminal Requirements
 
 For proper emoji display:
@@ -109,6 +111,8 @@ Note: Some terminal emulators like Alacritty, iTerm2, or Windows Terminal provid
   - [ ] Color schemes
   - [ ] Default text editor
   - [ ] File associations
+- [ ] Add image preview
+- [ ] Basic file dialog for web and other applications 
 
 ### Performance Improvements
 - [ ] Implement lazy loading for large directories
