@@ -79,6 +79,7 @@ Note: Some terminal emulators like Alacritty, iTerm2, or Windows Terminal provid
 - [ ] Implement proper memory management and cleanup for file attributes and vectors
 - [ ] Add error handling for failed memory allocations
 - [ ] Optimize file loading performance for large directories
+- [ ] File info not using emojis
 
 ### Edit Mode Issues
 - [ ] Banner notification not rotating correctly when rotating in edit mode
