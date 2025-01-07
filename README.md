@@ -35,7 +35,7 @@ If emojis aren't displaying correctly:
 2. Verify locale settings: `locale`
 3. Try updating your terminal emulator to a newer version
 
-Note: Some terminal emulators like Alacritty, iTerm2, or Windows Terminal provide better Unicode/emoji support than others.
+Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are known to work better with unicode/emojis. 
 
 # Features
 
