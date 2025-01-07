@@ -112,7 +112,7 @@ Note: Some terminal emulators like Alacritty, iTerm2, or Windows Terminal provid
   - [ ] Default text editor
   - [ ] File associations
 - [ ] Add image preview
-- [ ] Basic file dialog for web and other applications 
+- [ ] Basic file dialog for web and other applications
 
 ### Performance Improvements
 - [ ] Implement lazy loading for large directories
