@@ -75,13 +75,12 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 ### High Priority
 - [ ] Fix directory preview not scrolling 
 - [ ] Write custom magic library for in-house MIME type detection
-- [ ] Add text display on tree preview when user enters an empty dir and on dir preview
 - [ ] Implement proper memory management and cleanup for file attributes and vectors
 - [ ] Add error handling for failed memory allocations
 - [ ] Optimize file loading performance for large directories
 
 ### Edit Mode Issues
-- [ ] Banner notification not rotating correctly when rotating in edit mode
+- [ ] Banner marquee not rotating correctly when rotating in edit mode
 - [ ] Fix sig winch handling breaking while in edit mode
 - [ ] Fix cursor showing up at the bottom of the text editing buffer
 - [ ] Fix text buffer not scrolling to the right when typing and hitting the border of the window
@@ -142,6 +141,7 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 - [X] Add directory window scrolling
 - [X] Add tree structure visualization with proper icons and indentation
 - [X] File info not using emojis
+- [X] Add text display on tree preview when user enters an empty dir and on dir preview
 
 ## Prerequisites
 
