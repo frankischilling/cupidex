@@ -143,6 +143,12 @@ void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *l
     }
     closedir(dir);
 
+    // Check if no entries were found
+    if (entry_count == 0) {
+        mvwprintw(window, *line_num, 2 + level * 2, "This directory is empty");
+        (*line_num)++;
+    }
+
     // Initialize magic only if we have entries to display
     magic_t magic_cookie = NULL;
     if (entry_count > 0) {
@@ -273,6 +279,13 @@ void draw_directory_window(
     werase(window);
     box(window, 0, 0);
     
+    // Check if the directory is empty
+    if (cas->num_files == 0) {
+        mvwprintw(window, 1, 1, "This directory is empty");
+        wrefresh(window);
+        return;
+    }
+    
     // Initialize magic for MIME type detection
     magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE);
     if (magic_cookie == NULL || magic_load(magic_cookie, NULL) != 0) {
@@ -395,6 +408,9 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     if (S_ISDIR(file_stat.st_mode)) {
         int line_num = 7;
         show_directory_tree(window, file_path, 0, &line_num, max_y, max_x);
+
+        // If the directory is empty, show a message
+      
     } else if (is_supported_file_type(file_path)) {
         // Display file preview for supported types
         FILE *file = fopen(file_path, "r");
