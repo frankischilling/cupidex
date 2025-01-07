@@ -114,6 +114,7 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
   - [ ] File associations
 - [ ] Add image preview
 - [ ] Basic file dialog for web and other applications
+- [ ] Basic install script for building, installing nerd fonts, and the moving the executable to /usr/bin 
 
 ### Performance Improvements
 - [ ] Implement lazy loading for large directories
