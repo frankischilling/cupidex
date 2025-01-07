@@ -75,7 +75,7 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 ### High Priority
 - [ ] Fix directory preview not scrolling 
 - [ ] Write custom magic library for in-house MIME type detection
-- [ ] Add text display on tree preview when user enters an empty dir
+- [ ] Add text display on tree preview when user enters an empty dir and on dir preview
 - [ ] Implement proper memory management and cleanup for file attributes and vectors
 - [ ] Add error handling for failed memory allocations
 - [ ] Optimize file loading performance for large directories
