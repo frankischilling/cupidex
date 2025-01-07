@@ -79,7 +79,6 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 - [ ] Implement proper memory management and cleanup for file attributes and vectors
 - [ ] Add error handling for failed memory allocations
 - [ ] Optimize file loading performance for large directories
-- [ ] File info not using emojis
 
 ### Edit Mode Issues
 - [ ] Banner notification not rotating correctly when rotating in edit mode
@@ -142,6 +141,7 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 - [X] Fix being able to enter directory before calculation is done
 - [X] Add directory window scrolling
 - [X] Add tree structure visualization with proper icons and indentation
+- [X] File info not using emojis
 
 ## Prerequisites
 
