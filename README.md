@@ -110,6 +110,7 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
   - [ ] Color schemes
   - [ ] Default text editor
   - [ ] File associations
+  - [ ] Change default text preview files
 - [ ] Add image preview
 - [ ] Basic file dialog for web and other applications
 - [ ] Basic install script for building, installing nerd fonts and other dependencies, and then moving the executable to /usr/bin 
