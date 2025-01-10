@@ -84,8 +84,6 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 - [ ] Fix sig winch handling breaking while in edit mode
 - [ ] Fix cursor showing up at the bottom of the text editing buffer
 - [ ] Fix text buffer not scrolling to the right when typing and hitting the border of the window
-- [ ] Add undo/redo functionality in edit mode
-- [ ] Implement proper text selection in edit mode
 
 ### Features
 - [ ] Enable scrolling for tree preview in the preview window when tabbed over
@@ -96,6 +94,8 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
   - [ ] Shift+arrow for selection
   - [ ] Ctrl+arrow for faster cursor movement
   - [ ] Standard shortcuts (Ctrl+X, Ctrl+C, Ctrl+V)
+  - [ ] Add undo/redo functionality in edit mode
+  - [ ] Implement proper text selection in edit mode
 - [ ] Add file operations:
   - [ ] Copy/paste files and directories
   - [ ] Create new file/directory
