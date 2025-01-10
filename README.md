@@ -115,6 +115,138 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 - [ ] Basic file dialog for web and other applications
 - [ ] Basic install script for building, installing nerd fonts and other dependencies, and then moving the executable to /usr/bin 
 
+## Command Line Interface (CLI) Feature
+
+### Overview
+
+The **Command Line Interface (CLI)** for **cupidfm** will introduce a powerful way for users to perform common file operations directly from the application, similar to a terminal within the file manager. This feature will enable users to execute commands like navigating directories, opening files, copying/moving files, and even running system commands without leaving the **cupidfm** interface.
+
+### Planned Features for the CLI
+
+- **Command Input**: 
+  - Users will have access to a bottom command bar where commands can be typed.
+  - Basic commands like `cd`, `ls`, `open`, `copy`, `move`, `delete` will be supported.
+
+- **Command History**:
+  - Pressing the **Up/Down arrow keys** will cycle through previously executed commands, similar to a traditional terminal.
+
+- **Tab Completion**:
+  - Auto-complete file and directory names by pressing **TAB** while typing a command.
+
+- **Error Handling**:
+  - Clear and descriptive error messages will be displayed in the command bar when commands fail (e.g., "File not found" or "Permission denied").
+
+- **Custom cupidfm Commands**:
+  - Extend the functionality of traditional file operations with cupidfm-specific commands, such as:
+    - `tree`: Display the directory tree structure.
+    - `preview [file]`: Quickly open a file in the preview window.
+    - `info [file/dir]`: Show detailed information about a file or directory.
+
+- **System Command Integration**:
+  - Run standard shell commands like `grep`, `find`, `chmod`, and others directly from the cupidfm command bar.
+
+---
+
+### Usage Examples
+
+#### 1. **Navigating Directories**
+```bash
+> cd ~/Documents
+```
+- Changes the current working directory to `~/Documents`.
+
+#### 2. **Listing Files**
+```bash
+> ls
+```
+- Lists all files and directories in the current working directory.
+
+#### 3. **Opening a File**
+```bash
+> open notes.txt
+```
+- Opens `notes.txt` in the **preview window** or the **edit mode**.
+
+#### 4. **Copying Files**
+```bash
+> copy file1.txt ~/Documents/backup/
+```
+- Copies `file1.txt` to the `~/Documents/backup/` directory.
+
+#### 5. **Moving Files**
+```bash
+> move file1.txt ~/Downloads/
+```
+- Moves `file1.txt` to the `~/Downloads/` directory.
+
+#### 6. **Deleting a File**
+```bash
+> delete file1.txt
+```
+- Deletes `file1.txt` with a confirmation prompt.
+
+#### 7. **Directory Tree View**
+```bash
+> tree
+```
+- Displays the directory structure of the current folder in the **preview window**.
+
+#### 8. **Searching for Files**
+```bash
+> find "*.c"
+```
+- Finds all `.c` files in the current directory and its subdirectories.
+
+#### 9. **Checking File Information**
+```bash
+> info file1.txt
+```
+- Displays details like size, permissions, and modification time for `file1.txt`.
+
+---
+
+### Key Features to Implement
+
+#### **1. Command Bar Design**
+- Add a command bar at the bottom of the **cupidfm** interface.
+- Display typed commands dynamically and update the UI to show results or error messages.
+
+#### **2. Command Execution**
+- Parse and interpret user input.
+- Support basic file operations (`open`, `cd`, `ls`, `copy`, `move`, `delete`, etc.).
+- Integrate with system utilities for advanced commands.
+
+#### **3. Real-Time Feedback**
+- Display real-time feedback or results in the command bar.
+- Handle errors gracefully and inform users of invalid commands or paths.
+
+#### **4. Custom Commands**
+- Introduce cupidfm-specific commands for enhanced functionality, like:
+  - `tree`
+  - `preview`
+  - `info`
+
+#### **5. System Command Integration**
+- Allow users to run basic shell commands without leaving the application.
+- Commands like `grep` and `chmod` should work seamlessly.
+
+#### **6. Configurable Aliases**
+- Allow users to create command aliases for frequently used commands (e.g., alias `ls` to `list`).
+
+---
+
+### Todo List for Command Line Feature
+
+- [ ] Design and implement the command bar UI.
+- [ ] Add a command parser to interpret user input.
+- [ ] Implement core file operations (`cd`, `ls`, `open`, etc.).
+- [ ] Add error handling and feedback messages.
+- [ ] Support command history with Up/Down arrow keys.
+- [ ] Implement tab-based auto-completion for file and directory names.
+- [ ] Develop custom cupidfm commands (`tree`, `info`, etc.).
+- [ ] Integrate with system shell commands.
+- [ ] Allow user-defined aliases in a configuration file.
+
 ### Performance Improvements
 - [ ] Implement lazy loading for large directories
 - [ ] Optimize memory usage for file preview
@@ -206,6 +338,8 @@ This will start cupidfm. Error logs will be saved in `log.txt`.
   - **TAB**: Switch between directory and preview windows
   - **CONTROL+E**: Edit file in preview window
   - **CONTROL+G**: Save file while editing
+- **File Operations**: TBD
+   - **Copy file**   
 
 - **Preview Window**:
   - Up/Down arrows to scroll through file content
