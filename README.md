@@ -115,6 +115,8 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 - [ ] Basic file dialog for web and other applications
 - [ ] Basic install script for building, installing nerd fonts and other dependencies, and then moving the executable to /usr/bin 
 
+### Key Features to Implement
+
 ## Command Line Interface (CLI) Feature
 
 ### Overview
@@ -205,7 +207,54 @@ The **Command Line Interface (CLI)** for **cupidfm** will introduce a powerful w
 
 ---
 
-### Key Features to Implement
+### Future Plans for File Operations Shortcuts 
+
+- [ ] **Copy and Paste (Ctrl+C, Ctrl+V)**  
+  - Copy selected file or directory.
+  - Paste copied item into the current directory.
+
+- [ ] **Cut and Paste (Ctrl+X, Ctrl+V)**  
+  - Move selected file or directory.
+  - Paste cut item into the current directory.
+
+- [ ] **Delete (Ctrl+D)**  
+  - Delete selected file or directory with a confirmation prompt.
+
+- [ ] **Rename (Ctrl+R)**  
+  - Rename the selected file or directory.
+
+- [ ] **Create New File (Ctrl+N)**  
+  - Create a new, empty file in the current directory.
+
+- [ ] **Create New Directory (Ctrl+Shift+N)**  
+  - Create a new directory in the current directory.
+
+- [ ] **Select All (Ctrl+A)**  
+  - Select all files and directories in the current view.
+
+- [ ] **File Search (Ctrl+F)**  
+  - Search for files or directories by name or pattern.
+
+- [ ] **Quick File Info (Ctrl+I)**  
+  - Display detailed information about the selected file or directory.
+
+- [ ] **Undo/Redo (Ctrl+Z / Ctrl+Y)**  
+  - Undo or redo the last file operation.
+
+- [ ] **File Permissions (Ctrl+P)**  
+  - Edit permissions of the selected file or directory.
+
+- [ ] **Quick Move (F2)**  
+  - Open a prompt to quickly move the selected file or directory to a specified path.
+
+- [ ] **Batch Operations (Ctrl+Shift+B)**  
+  - Perform batch operations like copying, moving, or deleting multiple selected files.
+
+- [ ] **Symbolic Link Creation (Ctrl+L)**  
+  - Create a symbolic link for the selected file or directory.
+
+- [ ] **File Filtering (Ctrl+Shift+F)**  
+  - Apply filters to display files by type, size, or modification date.
 
 #### **1. Command Bar Design**
 - [ ] Add a command bar at the bottom of the **cupidfm** interface.
@@ -338,55 +387,6 @@ This will start cupidfm. Error logs will be saved in `log.txt`.
   - **TAB**: Switch between directory and preview windows
   - **CONTROL+E**: Edit file in preview window
   - **CONTROL+G**: Save file while editing
-    
-### Future Plans for File Operations Shortcuts 
-
-- [ ] **Copy and Paste (Ctrl+C, Ctrl+V)**  
-  - Copy selected file or directory.
-  - Paste copied item into the current directory.
-
-- [ ] **Cut and Paste (Ctrl+X, Ctrl+V)**  
-  - Move selected file or directory.
-  - Paste cut item into the current directory.
-
-- [ ] **Delete (Ctrl+D)**  
-  - Delete selected file or directory with a confirmation prompt.
-
-- [ ] **Rename (Ctrl+R)**  
-  - Rename the selected file or directory.
-
-- [ ] **Create New File (Ctrl+N)**  
-  - Create a new, empty file in the current directory.
-
-- [ ] **Create New Directory (Ctrl+Shift+N)**  
-  - Create a new directory in the current directory.
-
-- [ ] **Select All (Ctrl+A)**  
-  - Select all files and directories in the current view.
-
-- [ ] **File Search (Ctrl+F)**  
-  - Search for files or directories by name or pattern.
-
-- [ ] **Quick File Info (Ctrl+I)**  
-  - Display detailed information about the selected file or directory.
-
-- [ ] **Undo/Redo (Ctrl+Z / Ctrl+Y)**  
-  - Undo or redo the last file operation.
-
-- [ ] **File Permissions (Ctrl+P)**  
-  - Edit permissions of the selected file or directory.
-
-- [ ] **Quick Move (F2)**  
-  - Open a prompt to quickly move the selected file or directory to a specified path.
-
-- [ ] **Batch Operations (Ctrl+Shift+B)**  
-  - Perform batch operations like copying, moving, or deleting multiple selected files.
-
-- [ ] **Symbolic Link Creation (Ctrl+L)**  
-  - Create a symbolic link for the selected file or directory.
-
-- [ ] **File Filtering (Ctrl+Shift+F)**  
-  - Apply filters to display files by type, size, or modification date.
 
 ## Contributing
 
