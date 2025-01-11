@@ -208,30 +208,30 @@ The **Command Line Interface (CLI)** for **cupidfm** will introduce a powerful w
 ### Key Features to Implement
 
 #### **1. Command Bar Design**
-- Add a command bar at the bottom of the **cupidfm** interface.
-- Display typed commands dynamically and update the UI to show results or error messages.
+- [ ] Add a command bar at the bottom of the **cupidfm** interface.
+- [ ] Display typed commands dynamically and update the UI to show results or error messages.
 
 #### **2. Command Execution**
-- Parse and interpret user input.
-- Support basic file operations (`open`, `cd`, `ls`, `copy`, `move`, `delete`, etc.).
-- Integrate with system utilities for advanced commands.
+- [ ] Parse and interpret user input.
+- [ ] Support basic file operations (`open`, `cd`, `ls`, `copy`, `move`, `delete`, etc.).
+- [ ] Integrate with system utilities for advanced commands.
 
 #### **3. Real-Time Feedback**
-- Display real-time feedback or results in the command bar.
-- Handle errors gracefully and inform users of invalid commands or paths.
+- [ ] Display real-time feedback or results in the command bar.
+- [ ] Handle errors gracefully and inform users of invalid commands or paths.
 
 #### **4. Custom Commands**
-- Introduce cupidfm-specific commands for enhanced functionality, like:
+- [ ] Introduce cupidfm-specific commands for enhanced functionality, like:
   - `tree`
   - `preview`
   - `info`
 
 #### **5. System Command Integration**
-- Allow users to run basic shell commands without leaving the application.
-- Commands like `grep` and `chmod` should work seamlessly.
+- [ ] Allow users to run basic shell commands without leaving the application.
+- [ ] Commands like `grep` and `chmod` should work seamlessly.
 
 #### **6. Configurable Aliases**
-- Allow users to create command aliases for frequently used commands (e.g., alias `ls` to `list`).
+- [ ] Allow users to create command aliases for frequently used commands (e.g., alias `ls` to `list`).
 
 ---
 
