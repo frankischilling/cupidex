@@ -391,6 +391,8 @@ This will start cupidfm. Error logs will be saved in `log.txt`.
   - **TAB**: Switch between directory and preview windows
   - **CONTROL+E**: Edit file in preview window
   - **CONTROL+G**: Save file while editing
+  - **CONTROL+C**: Copy selected file to clipboard
+  - **CONTORL+V**: Paste selected file to current location
 
 ## Contributing
 
