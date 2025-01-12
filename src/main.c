@@ -28,7 +28,6 @@
 #include "main.h"
 #include "globals.h"
 
-#define MAX_PATH_LENGTH 256 // 256
 #define MAX_DISPLAY_LENGTH 32
 #define TAB 9
 #define CTRL_E 5
@@ -163,7 +162,7 @@ void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *l
         const char *emoji;
         if (entries[i].is_dir) {
             emoji = "📁";
-        } else if (magic_cookie) {
+        } else if (magic_cookie) { // if magic fails 
             size_t name_len = strlen(entries[i].name);
             if (dir_path_len + name_len + 2 <= MAX_PATH_LENGTH) {
                 strcpy(full_path, dir_path);
@@ -841,66 +840,63 @@ void *banner_scrolling_thread(void *arg) {
 int main() {
     // Initialize ncurses
     setlocale(LC_ALL, "");
-    // Initialize ncurses with wide-character support
+    
+    // Ignore Ctrl+C at the OS level so we can handle it ourselves
+    struct sigaction sa;
+    sa.sa_handler = SIG_IGN;      // SIG_IGN means "ignore this signal"
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
 
+    // Set up signal handler for window resize
+    sa.sa_handler = handle_winch;
+    sa.sa_flags = SA_RESTART; // Restart interrupted system calls
+    sigaction(SIGWINCH, &sa, NULL);
+
+    // Initialize ncurses
     initscr();
     noecho();
-    cbreak();
+    raw();   // or raw() if you prefer raw mode
     keypad(stdscr, TRUE);
     curs_set(0);
     timeout(100);
-    int notif_height = 1;
-    int banner_height = 3; 
 
-    // Initialize  notif windows
-    notifwin = newwin(1, COLS, LINES - 1, 0);
+    // Initialize windows and other components
+    int notif_height = 1;
+    int banner_height = 3;
+
+    // Initialize notif windows
+    notifwin = newwin(notif_height, COLS, LINES - notif_height, 0);
     werase(notifwin);
     box(notifwin, 0, 0);
     wrefresh(notifwin);
 
-	// init main window
-    mainwin = newwin(LINES - 1, COLS, 0, 0);
-    wtimeout(mainwin, 100);
-
- 	// Initialize banner window
+    // Initialize banner window
     bannerwin = newwin(banner_height, COLS, 0, 0);
     wbkgd(bannerwin, COLOR_PAIR(1)); // Set background color
     box(bannerwin, 0, 0);
     wrefresh(bannerwin);
 
-	// Initialize notifwin below the banner
-	notifwin = newwin(notif_height, COLS, banner_height + LINES - 1 - notif_height, 0);
-	werase(notifwin);
-	box(notifwin, 0, 0);
-	wrefresh(notifwin);
+    // Initialize main window
+    mainwin = newwin(LINES - banner_height - notif_height, COLS, banner_height, 0);
+    wtimeout(mainwin, 100);
 
-	// Initialize main window below the banner and above notifwin
-	mainwin = newwin(LINES - banner_height - notif_height, COLS, banner_height, 0);
-	wtimeout(mainwin, 100);
+    // Initialize subwindows
+    SIZE dir_win_width = MAX(COLS / 2, 20);
+    SIZE preview_win_width = MAX(COLS - dir_win_width, 20);
 
-	// Initialize subwindows
-	SIZE dir_win_width = MAX(COLS / 2, 20);
-	SIZE preview_win_width = MAX(COLS - dir_win_width, 20);
+    if (dir_win_width + preview_win_width > COLS) {
+        dir_win_width = COLS / 2;
+        preview_win_width = COLS - dir_win_width;
+    }
 
-	if (dir_win_width + preview_win_width > COLS) {
-	    dir_win_width = COLS / 2;
-	    preview_win_width = COLS - dir_win_width;
-	}
+    dirwin = subwin(mainwin, LINES - banner_height - notif_height, dir_win_width, banner_height, 0);
+    box(dirwin, 0, 0);
+    wrefresh(dirwin);
 
-	dirwin = subwin(mainwin, LINES - banner_height - notif_height, dir_win_width, banner_height, 0);
-	box(dirwin, 0, 0);
-	wrefresh(dirwin);
-
-	previewwin = subwin(mainwin, LINES - banner_height - notif_height, preview_win_width, banner_height, dir_win_width);
-	box(previewwin, 0, 0);
-	wrefresh(previewwin);
-
-    // Set up signal handler for window resize
-    struct sigaction sa;
-    sa.sa_handler = handle_winch;
-    sa.sa_flags = SA_RESTART; // Restart interrupted system calls
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGWINCH, &sa, NULL);
+    previewwin = subwin(mainwin, LINES - banner_height - notif_height, preview_win_width, banner_height, dir_win_width);
+    box(previewwin, 0, 0);
+    wrefresh(previewwin);
 
     // Initialize application state
     AppState state;
@@ -1077,6 +1073,29 @@ int main() {
                         should_clear_notif = false;
                     }
                     break;
+                case 3:  // Ctrl+C
+                    if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
+                        char full_path[MAX_PATH_LENGTH];
+                        path_join(full_path, state.current_directory, state.selected_entry);
+                        copy_to_clipboard(full_path);
+                        strncpy(copied_filename, state.selected_entry, MAX_PATH_LENGTH);
+                        werase(notifwin);
+                        mvwprintw(notifwin, 0, 0, "Copied to clipboard: %s", state.selected_entry);
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    }
+                    break;
+                case 22:  // Ctrl+V
+                    if (active_window == DIRECTORY_WIN_ACTIVE && copied_filename[0] != '\0') {
+                        paste_from_clipboard(state.current_directory, copied_filename);
+                        reload_directory(&state.files, state.current_directory);
+                        state.dir_window_cas.num_files = Vector_len(state.files);
+                        werase(notifwin);
+                        mvwprintw(notifwin, 0, 0, "Pasted file: %s", copied_filename);
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    }
+                    break;
                 default:
                     break;
             }
@@ -1128,3 +1147,4 @@ int main() {
     endwin();
     return 0;
 }
+

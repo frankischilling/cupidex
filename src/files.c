@@ -21,10 +21,8 @@
 #include "main.h"                  // for FileAttr, Vector, Vector_add, Vector_len, Vector_set_len
 #include "utils.h"                 // for path_join, is_directory
 #include "files.h"                 // for FileAttributes, FileAttr, MAX_PATH_LENGTH
-
+#include "globals.h"
 #include <time.h>
-
-#define MAX_PATH_LENGTH 1024
 #define MIN_INT_SIZE_T(x, y) (((size_t)(x) > (y)) ? (y) : (x))
 #define FILES_BANNER_UPDATE_INTERVAL 50000 // 50ms in microseconds
 
@@ -211,9 +209,13 @@ long get_directory_size(const char *dir_path) {
 
     while ((entry = readdir(dir)) != NULL) {
         char path[MAX_PATH_LENGTH];
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        if (strlen(dir_path) + strlen(entry->d_name) + 1 < sizeof(path)) {
+            snprintf(path, sizeof(path), "%s/%s", dir_path, entry->d_name);
+        } else {
+            // Handle the error, e.g., log a message or skip this entry
+            fprintf(stderr, "Path length exceeds buffer size for %s/%s\n", dir_path, entry->d_name);
             continue;
-        snprintf(path, sizeof(path), "%s/%s", dir_path, entry->d_name);
+        }
         if (lstat(path, &statbuf) == -1)
             continue;
         if (S_ISDIR(statbuf.st_mode)) {
