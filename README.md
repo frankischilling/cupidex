@@ -336,6 +336,7 @@ To build and run CupidFM, you need the following dependencies installed:
 - `make` (build automation tool)
 - `ncurses` library for terminal handling
 - `libmagic` for MIME type detection based on file content
+- `xclip ` required for copying file paths to the system clipboard
 
 ### Installing Dependencies on Ubuntu
 
