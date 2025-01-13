@@ -424,40 +424,93 @@ const char* get_file_emoji(const char *mime_type, const char *filename) {
 
 // copy file to users clipboard
 void copy_to_clipboard(const char *path) {
-    char command[512];
-    snprintf(command, sizeof(command), "xclip -selection clipboard -i < %s", path);
+    struct stat path_stat;
+    if (stat(path, &path_stat) != 0) {
+        fprintf(stderr, "Error: Unable to get file/directory stats.\n");
+        return;
+    }
 
+    // Create a temporary file to store path
+    char temp_path[512];
+    snprintf(temp_path, sizeof(temp_path), "/tmp/cupidfm_copy_%d", getpid());
+    
+    FILE *temp = fopen(temp_path, "w");
+    if (!temp) {
+        fprintf(stderr, "Error: Unable to create temporary file.\n");
+        return;
+    }
+
+    // Write the path and whether it's a directory
+    fprintf(temp, "%s\n%d", path, S_ISDIR(path_stat.st_mode));
+    fclose(temp);
+
+    // Copy the temp file content to clipboard
+    char command[1024];
+    snprintf(command, sizeof(command), "xclip -selection clipboard -i < %s", temp_path);
+    
     int result = system(command);
     if (result == -1) {
-        fprintf(stderr, "Error: Unable to copy file content to clipboard.\n");
+        fprintf(stderr, "Error: Unable to copy to clipboard.\n");
     }
+
+    // Clean up
+    unlink(temp_path);
 }
 
 // paste files to directory the user in
 void paste_from_clipboard(const char *target_directory, const char *filename) {
-    char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s/%s", target_directory, filename);
-
-    // Extract the file extension
-    char *dot = strrchr(filename, '.');
-    int counter = 1;
-
-    while (access(full_path, F_OK) == 0) {
-        if (dot) {
-            // If there's an extension, insert the counter before it
-            snprintf(full_path, sizeof(full_path), "%s/%.*s_%d%s", target_directory, (int)(dot - filename), filename, counter++, dot);
-        } else {
-            // If there's no extension, append the counter at the end
-            snprintf(full_path, sizeof(full_path), "%s/%s_%d", target_directory, filename, counter++);
-        }
+    // Create temp file to get clipboard content
+    char temp_path[512];
+    snprintf(temp_path, sizeof(temp_path), "/tmp/cupidfm_paste_%d", getpid());
+    
+    char command[1024];
+    snprintf(command, sizeof(command), "xclip -selection clipboard -o > %s", temp_path);
+    
+    if (system(command) == -1) {
+        fprintf(stderr, "Error: Unable to read from clipboard.\n");
+        return;
     }
 
-    char command[1024];
-    snprintf(command, sizeof(command), "xclip -selection clipboard -o > %s", full_path);
+    // Read the source path and type from temp file
+    FILE *temp = fopen(temp_path, "r");
+    if (!temp) {
+        unlink(temp_path);
+        return;
+    }
 
-    int result = system(command);
-    if (result == -1) {
-        fprintf(stderr, "Error: Unable to paste file content from clipboard.\n");
+    char source_path[512];
+    int is_directory;
+    if (fscanf(temp, "%511[^\n]\n%d", source_path, &is_directory) != 2) {
+        fclose(temp);
+        unlink(temp_path);
+        return;
+    }
+    fclose(temp);
+    unlink(temp_path);
+
+    // Create destination path
+    char dest_path[512];
+    snprintf(dest_path, sizeof(dest_path), "%s/%s", target_directory, filename);
+
+    // Handle name conflicts
+    int counter = 1;
+    while (access(dest_path, F_OK) == 0) {
+        snprintf(dest_path, sizeof(dest_path), "%s/%s_%d", target_directory, filename, counter++);
+    }
+
+    // Copy based on type
+    if (is_directory) {
+        char cp_command[2048];
+        snprintf(cp_command, sizeof(cp_command), "cp -r \"%s\" \"%s\"", source_path, dest_path);
+        if (system(cp_command) == -1) {
+            fprintf(stderr, "Error: Unable to copy directory.\n");
+        }
+    } else {
+        char cp_command[2048];
+        snprintf(cp_command, sizeof(cp_command), "cp \"%s\" \"%s\"", source_path, dest_path);
+        if (system(cp_command) == -1) {
+            fprintf(stderr, "Error: Unable to copy file.\n");
+        }
     }
 }
 
