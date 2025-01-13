@@ -208,11 +208,11 @@ The **Command Line Interface (CLI)** for **cupidfm** will introduce a powerful w
 ---
 
 ### Future Plans for File Operations Shortcuts 
-- [ ] **Notification on shortcut**
-  - Convert the notfication bar to work with the command line
+- [X] **Notification on shortcut**
+  - [ ] Convert the notfication bar to work with the command line
   - Ex. When a user enters command mode it will show up where the notifications does.
 
-- [ ] **Copy and Paste (Ctrl+C, Ctrl+V)**  
+- [X] **Copy and Paste (Ctrl+C, Ctrl+V)**  
   - Copy selected file or directory.
   - Paste copied item into the current directory.
 
