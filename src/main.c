@@ -1096,6 +1096,24 @@ int main() {
                         should_clear_notif = false;
                     }
                     break;
+                case 24:  // Ctrl+X
+                    if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
+                        char full_path[MAX_PATH_LENGTH];
+                        path_join(full_path, state.current_directory, state.selected_entry);
+                        cut_and_paste(full_path);
+                        strncpy(copied_filename, state.selected_entry, MAX_PATH_LENGTH);
+                        
+                        // Reload directory to reflect the cut file
+                        reload_directory(&state.files, state.current_directory);
+                        state.dir_window_cas.num_files = Vector_len(state.files);
+                        
+                        // Update notification
+                        werase(notifwin);
+                        mvwprintw(notifwin, 0, 0, "Cut to clipboard: %s", state.selected_entry);
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    }
+                    break;
                 default:
                     break;
             }

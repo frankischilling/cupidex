@@ -22,4 +22,4 @@ const char* get_file_emoji(const char *mime_type, const char *filename);
 // short cut utils
 void copy_to_clipboard(const char *path);
 void paste_from_clipboard(const char *target_directory, const char *filename);
-
+void cut_and_paste(const char *path);

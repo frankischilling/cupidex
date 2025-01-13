@@ -459,7 +459,6 @@ void copy_to_clipboard(const char *path) {
 
 // paste files to directory the user in
 void paste_from_clipboard(const char *target_directory, const char *filename) {
-    // Create temp file to get clipboard content
     char temp_path[512];
     snprintf(temp_path, sizeof(temp_path), "/tmp/cupidfm_paste_%d", getpid());
     
@@ -471,7 +470,6 @@ void paste_from_clipboard(const char *target_directory, const char *filename) {
         return;
     }
 
-    // Read the source path and type from temp file
     FILE *temp = fopen(temp_path, "r");
     if (!temp) {
         unlink(temp_path);
@@ -480,7 +478,10 @@ void paste_from_clipboard(const char *target_directory, const char *filename) {
 
     char source_path[512];
     int is_directory;
-    if (fscanf(temp, "%511[^\n]\n%d", source_path, &is_directory) != 2) {
+    char operation[10] = {0};  // To store CUT or COPY
+    
+    // Read the source path, directory flag, and operation type
+    if (fscanf(temp, "%511[^\n]\n%d\n%9s", source_path, &is_directory, operation) < 2) {
         fclose(temp);
         unlink(temp_path);
         return;
@@ -488,29 +489,96 @@ void paste_from_clipboard(const char *target_directory, const char *filename) {
     fclose(temp);
     unlink(temp_path);
 
+    // Split filename into base and extension
+    char base_name[256] = "";
+    char extension[256] = "";
+    const char *last_dot = strrchr(filename, '.');
+    
+    if (last_dot) {
+        size_t base_len = last_dot - filename;
+        strncpy(base_name, filename, base_len);
+        base_name[base_len] = '\0';
+        strcpy(extension, last_dot); // Copy the dot and extension
+    } else {
+        strcpy(base_name, filename);
+    }
+
     // Create destination path
     char dest_path[512];
-    snprintf(dest_path, sizeof(dest_path), "%s/%s", target_directory, filename);
+    size_t path_len = snprintf(dest_path, sizeof(dest_path), "%s/%s%s", 
+            target_directory, base_name, extension);
+    
+    if (path_len >= sizeof(dest_path)) {
+        fprintf(stderr, "Error: Path too long.\n");
+        return;
+    }
 
     // Handle name conflicts
     int counter = 1;
     while (access(dest_path, F_OK) == 0) {
-        snprintf(dest_path, sizeof(dest_path), "%s/%s_%d", target_directory, filename, counter++);
+        path_len = snprintf(dest_path, sizeof(dest_path), "%s/%s%d%s", 
+                target_directory, base_name, counter, extension);
+        
+        if (path_len >= sizeof(dest_path)) {
+            fprintf(stderr, "Error: Path too long.\n");
+            return;
+        }
+        counter++;
     }
 
-    // Copy based on type
+    // Check if this is a cut operation
+    bool is_cut = (operation[0] == 'C' && operation[1] == 'U' && operation[2] == 'T');
+
+    // Use mv for cut operations, cp for copy operations
+    char file_command[2048];
     if (is_directory) {
-        char cp_command[2048];
-        snprintf(cp_command, sizeof(cp_command), "cp -r \"%s\" \"%s\"", source_path, dest_path);
-        if (system(cp_command) == -1) {
-            fprintf(stderr, "Error: Unable to copy directory.\n");
-        }
+        snprintf(file_command, sizeof(file_command), "%s -r \"%s\" \"%s\"", 
+                is_cut ? "mv" : "cp", source_path, dest_path);
     } else {
-        char cp_command[2048];
-        snprintf(cp_command, sizeof(cp_command), "cp \"%s\" \"%s\"", source_path, dest_path);
-        if (system(cp_command) == -1) {
-            fprintf(stderr, "Error: Unable to copy file.\n");
-        }
+        snprintf(file_command, sizeof(file_command), "%s \"%s\" \"%s\"", 
+                is_cut ? "mv" : "cp", source_path, dest_path);
+    }
+    
+    if (system(file_command) == -1) {
+        fprintf(stderr, "Error: Unable to %s %s.\n", 
+                is_cut ? "move" : "copy", 
+                is_directory ? "directory" : "file");
     }
 }
 
+// cut and put into memory 
+void cut_and_paste(const char *path) {
+    struct stat path_stat;
+    if (stat(path, &path_stat) != 0) {
+        fprintf(stderr, "Error: Unable to get file/directory stats.\n");
+        return;
+    }
+
+    // Create a temporary file to store path with CUT flag
+    char temp_path[512];
+    snprintf(temp_path, sizeof(temp_path), "/tmp/cupidfm_cut_%d", getpid());
+    
+    FILE *temp = fopen(temp_path, "w");
+    if (!temp) {
+        fprintf(stderr, "Error: Unable to create temporary file.\n");
+        return;
+    }
+
+    // Write the path, whether it's a directory, and mark it as CUT operation
+    fprintf(temp, "%s\n%d\nCUT", path, S_ISDIR(path_stat.st_mode));
+    fclose(temp);
+
+    // Copy the temp file content to clipboard
+    char command[1024];
+    snprintf(command, sizeof(command), "xclip -selection clipboard -i < %s", temp_path);
+    
+    int result = system(command);
+    if (result == -1) {
+        fprintf(stderr, "Error: Unable to copy to clipboard.\n");
+    }
+
+    // Clean up
+    unlink(temp_path);
+
+    // Note: We no longer delete the file here - it will be moved during paste operation
+}
