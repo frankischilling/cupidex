@@ -220,8 +220,9 @@ The **Command Line Interface (CLI)** for **cupidfm** will introduce a powerful w
   - Move selected file or directory.
   - Paste cut item into the current directory.
 
-- [ ] **Delete (Ctrl+D)**  
-  - Delete selected file or directory with a confirmation prompt.
+- [ ] **Delete (Ctrl+D)**
+  - [X] Delete selected file or dir with no prompt
+  - [ ] Delete selected file or directory with a confirmation prompt.
 
 - [ ] **Rename (Ctrl+R)**  
   - Rename the selected file or directory.
