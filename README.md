@@ -216,7 +216,7 @@ The **Command Line Interface (CLI)** for **cupidfm** will introduce a powerful w
   - Copy selected file or directory.
   - Paste copied item into the current directory.
 
-- [ ] **Cut and Paste (Ctrl+X, Ctrl+V)**  
+- [X] **Cut and Paste (Ctrl+X, Ctrl+V)**  
   - Move selected file or directory.
   - Paste cut item into the current directory.
 
