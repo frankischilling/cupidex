@@ -31,6 +31,8 @@
 #define MAX_DISPLAY_LENGTH 32
 #define TAB 9
 #define CTRL_E 5
+#define BANNER_SCROLL_INTERVAL 250000  // Microseconds between scroll updates (250ms)
+#define INPUT_CHECK_INTERVAL 10        // Milliseconds for input checking (10ms)
 
 // Global variable definitions
 const char *BANNER_TEXT = "Welcome to CupidFM - Press F1 to exit";
@@ -39,10 +41,8 @@ WINDOW *bannerwin = NULL;
 WINDOW *notifwin = NULL;
 struct timespec last_scroll_time = {0, 0};
 pthread_mutex_t banner_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-
-#define BANNER_SCROLL_INTERVAL 250000  // Microseconds between scroll updates (250ms)
-#define INPUT_CHECK_INTERVAL 10        // Milliseconds for input checking (10ms)
+bool should_clear_notif = true;
+struct timespec last_notification_time = {0, 0};
 
 // Global resize flag
 volatile sig_atomic_t resized = 0;
@@ -75,6 +75,17 @@ typedef struct {
 
 // Forward declaration of fix_cursor
 void fix_cursor(CursorAndSlice *cas);
+
+void show_notification(WINDOW *win, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    werase(win);
+    wmove(win, 0, 0);
+    vw_printw(win, format, args);
+    va_end(args);
+    wrefresh(win);
+    clock_gettime(CLOCK_MONOTONIC, &last_notification_time);
+}
 
 /** Function to show directory tree recursively
  *
@@ -664,7 +675,11 @@ void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_
     }
 
     werase(notifwin);
-    mvwprintw(notifwin, 0, 0, "Navigated to parent directory: %s", *current_directory);
+    //mvwprintw(notifwin, 0, 0, "Navigated to parent directory: %s", *current_directory);
+    
+    show_notification(notifwin, "Navigated to parent directory: %s", *current_directory);
+    should_clear_notif = false;
+    
     wrefresh(notifwin);
 }
 /** Function to navigate right in the directory window
@@ -680,7 +695,10 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
     FileAttr current_file = files->el[dir_window_cas->cursor];
     if (!FileAttr_is_dir(current_file)) {
         werase(notifwin);
-        mvwprintw(notifwin, 0, 0, "Selected entry is not a directory");
+        //mvwprintw(notifwin, 0, 0, "Selected entry is not a directory");
+        show_notification(notifwin, "Selected entry is not a directory");
+        should_clear_notif = false;
+
         wrefresh(notifwin);
         return;
     }
@@ -692,8 +710,11 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
     // Check if we’re not re-entering the same directory path
     if (strcmp(new_path, *current_directory) == 0) {
         werase(notifwin);
-        mvwprintw(notifwin, 0, 0, "Already in this directory");
+        //mvwprintw(notifwin, 0, 0, "Already in this directory");
+        show_notification(notifwin, "Already in this directory");
+
         wrefresh(notifwin);
+                should_clear_notif = false;
         return;
     }
 
@@ -704,6 +725,7 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
         wrefresh(notifwin);
         return;
     }
+    
     VecStack_push(&directoryStack, new_entry);
 
     // Free the old directory and set to the new path
@@ -738,7 +760,11 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
     }
 
     werase(notifwin);
-    mvwprintw(notifwin, 0, 0, "Entered directory: %s", state->selected_entry);
+    //mvwprintw(notifwin, 0, 0, "Entered directory: %s", state->selected_entry);
+    
+    show_notification(notifwin, "Entered directory: %s", state->selected_entry);
+    should_clear_notif = false;    
+    
     wrefresh(notifwin);
 }
 /** Function to handle terminal window resize
@@ -963,7 +989,16 @@ int main() {
             last_update_time = current_time;
         }
 
-        bool should_clear_notif = true;
+        clock_gettime(CLOCK_MONOTONIC, &current_time);
+        long notification_diff = (current_time.tv_sec - last_notification_time.tv_sec) * 1000 +
+                               (current_time.tv_nsec - last_notification_time.tv_nsec) / 1000000;
+
+        if (!should_clear_notif && notification_diff >= NOTIFICATION_TIMEOUT_MS) {
+            werase(notifwin);
+            wrefresh(notifwin);
+            should_clear_notif = true;
+        }
+
         if (ch != ERR) {
             switch (ch) {
                 case KEY_UP:
@@ -971,14 +1006,17 @@ int main() {
                         navigate_up(&state.dir_window_cas, &state.files, &state.selected_entry);
                         state.preview_start_line = 0;
                         werase(notifwin);
-                        mvwprintw(notifwin, 0, 0, "Moved up");
+                        //mvwprintw(notifwin, 0, 0, "Moved up");
+
+                        show_notification(notifwin, "Moved up");
+
                         wrefresh(notifwin);
                         should_clear_notif = false;
                     } else if (active_window == PREVIEW_WIN_ACTIVE) {
                         if (state.preview_start_line > 0) {
                             state.preview_start_line--;
                             werase(notifwin);
-                            mvwprintw(notifwin, 0, 0, "Scrolled up");
+                            show_notification(notifwin, "Scrolled up");
                             wrefresh(notifwin);
                             should_clear_notif = false;
                         }
@@ -989,7 +1027,8 @@ int main() {
                         navigate_down(&state.dir_window_cas, &state.files, &state.selected_entry);
                         state.preview_start_line = 0;
                         werase(notifwin);
-                        mvwprintw(notifwin, 0, 0, "Moved down");
+                        //mvwprintw(notifwin, 0, 0, "Moved down");
+                        show_notification(notifwin, "Moved down");
                         wrefresh(notifwin);
                         should_clear_notif = false;
                     } else if (active_window == PREVIEW_WIN_ACTIVE) {
@@ -1011,7 +1050,8 @@ int main() {
                         if (state.preview_start_line < max_start_line) {
                             state.preview_start_line++;
                             werase(notifwin);
-                            mvwprintw(notifwin, 0, 0, "Scrolled down");
+                            //mvwprintw(notifwin, 0, 0, "Scrolled down");
+                            show_notification(notifwin, "Scrolled down");
                             wrefresh(notifwin);
                             should_clear_notif = false;
                         }
@@ -1022,7 +1062,8 @@ int main() {
                         navigate_left(&state.current_directory, &state.files, &state.dir_window_cas, &state);
                         state.preview_start_line = 0;
                         werase(notifwin);
-                        mvwprintw(notifwin, 0, 0, "Navigated to parent directory");
+                        //mvwprintw(notifwin, 0, 0, "Navigated to parent directory");
+                        show_notification(notifwin, "Navigated to parent directory");
                         wrefresh(notifwin);
                         should_clear_notif = false;
                     }
@@ -1040,12 +1081,14 @@ int main() {
                             }
 
                             werase(notifwin);
-                            mvwprintw(notifwin, 0, 0, "Entered directory: %s", state.selected_entry);
+                            //mvwprintw(notifwin, 0, 0, "Entered directory: %s", state.selected_entry);
+                            show_notification(notifwin, "Entered directory: %s", state.selected_entry);
                             wrefresh(notifwin);
                             should_clear_notif = false;
                         } else {
                             werase(notifwin);
-                            mvwprintw(notifwin, 0, 0, "Selected entry is not a directory");
+                            //mvwprintw(notifwin, 0, 0, "Selected entry is not a directory");
+                            show_notification(notifwin, "Selected entry is not a directory");
                             wrefresh(notifwin);
                             should_clear_notif = false;
                         }
@@ -1057,7 +1100,8 @@ int main() {
                         state.preview_start_line = 0;
                     }
                     werase(notifwin);
-                    mvwprintw(notifwin, 0, 0, "Switched to %s window", (active_window == DIRECTORY_WIN_ACTIVE) ? "Directory" : "Preview");
+                    //mvwprintw(notifwin, 0, 0, "Switched to %s window", (active_window == DIRECTORY_WIN_ACTIVE) ? "Directory" : "Preview");
+                    show_notification(notifwin, "Switched to %s window", (active_window == DIRECTORY_WIN_ACTIVE) ? "Directory" : "Preview");
                     wrefresh(notifwin);
                     should_clear_notif = false;
                     break;
@@ -1068,7 +1112,8 @@ int main() {
                         edit_file_in_terminal(previewwin, file_path, notifwin);
                         state.preview_start_line = 0;
                         werase(notifwin);
-                        mvwprintw(notifwin, 0, 0, "Editing file: %s", state.selected_entry);
+                        //mvwprintw(notifwin, 0, 0, "Editing file: %s", state.selected_entry);
+                        show_notification(notifwin, "Editing file: %s", state.selected_entry);
                         wrefresh(notifwin);
                         should_clear_notif = false;
                     }
@@ -1080,7 +1125,8 @@ int main() {
                         copy_to_clipboard(full_path);
                         strncpy(copied_filename, state.selected_entry, MAX_PATH_LENGTH);
                         werase(notifwin);
-                        mvwprintw(notifwin, 0, 0, "Copied to clipboard: %s", state.selected_entry);
+                        //mvwprintw(notifwin, 0, 0, "Copied to clipboard: %s", state.selected_entry);
+                        show_notification(notifwin, "Copied to clipboard: %s", state.selected_entry);
                         wrefresh(notifwin);
                         should_clear_notif = false;
                     }
@@ -1091,7 +1137,8 @@ int main() {
                         reload_directory(&state.files, state.current_directory);
                         state.dir_window_cas.num_files = Vector_len(state.files);
                         werase(notifwin);
-                        mvwprintw(notifwin, 0, 0, "Pasted file: %s", copied_filename);
+                        //mvwprintw(notifwin, 0, 0, "Pasted file: %s", copied_filename);
+                        show_notification(notifwin, "Pasted file: %s", copied_filename);
                         wrefresh(notifwin);
                         should_clear_notif = false;
                     }
@@ -1109,7 +1156,28 @@ int main() {
                         
                         // Update notification
                         werase(notifwin);
-                        mvwprintw(notifwin, 0, 0, "Cut to clipboard: %s", state.selected_entry);
+                        //mvwprintw(notifwin, 0, 0, "Cut to clipboard: %s", state.selected_entry);
+                        show_notification(notifwin, "Cut to clipboard: %s", state.selected_entry);
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    }
+                    break;
+                case 4:  // Control+D
+                    if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
+                        char full_path[MAX_PATH_LENGTH];
+                        path_join(full_path, state.current_directory, state.selected_entry);
+                        
+                        // Delete the item
+                        delete_item(full_path);
+                        
+                        // Reload directory to reflect changes
+                        reload_directory(&state.files, state.current_directory);
+                        state.dir_window_cas.num_files = Vector_len(state.files);
+                        
+                        // Update notification
+                        werase(notifwin);
+                        //mvwprintw(notifwin, 0, 0, "Deleted: %s", state.selected_entry);
+                        show_notification(notifwin, "Deleted: %s", state.selected_entry);
                         wrefresh(notifwin);
                         should_clear_notif = false;
                     }

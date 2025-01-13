@@ -582,3 +582,27 @@ void cut_and_paste(const char *path) {
 
     // Note: We no longer delete the file here - it will be moved during paste operation
 }
+
+void delete_item(const char *path) {
+    struct stat path_stat;
+    if (stat(path, &path_stat) != 0) {
+        fprintf(stderr, "Error: Unable to get file/directory stats.\n");
+        return;
+    }
+
+    if (S_ISDIR(path_stat.st_mode)) {
+        // For directories, use rm -rf command
+        char command[1024];
+        snprintf(command, sizeof(command), "rm -rf \"%s\"", path);
+        
+        int result = system(command);
+        if (result == -1) {
+            fprintf(stderr, "Error: Unable to delete directory: %s\n", path);
+        }
+    } else {
+        // For regular files, use unlink
+        if (unlink(path) != 0) {
+            fprintf(stderr, "Error: Unable to delete file: %s\n", path);
+        }
+    }
+}
