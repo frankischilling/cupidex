@@ -858,6 +858,13 @@ void *banner_scrolling_thread(void *arg) {
     return NULL;
 }
 
+// Add this to the cleanup section before program exit
+void cleanup_temp_files() {
+    char command[1024];
+    snprintf(command, sizeof(command), "rm -rf /tmp/cupidfm_*_%d", getpid());
+    system(command);
+}
+
 /** Function to handle cleanup and exit
  *
  * @param r the exit code
@@ -1231,6 +1238,10 @@ int main() {
     delwin(notifwin);
     delwin(mainwin);
     endwin();
+
+    // Add the cleanup call before exit
+    cleanup_temp_files();
+
     return 0;
 }
 

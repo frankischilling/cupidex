@@ -478,9 +478,8 @@ void paste_from_clipboard(const char *target_directory, const char *filename) {
 
     char source_path[512];
     int is_directory;
-    char operation[10] = {0};  // To store CUT or COPY
+    char operation[10] = {0};
     
-    // Read the source path, directory flag, and operation type
     if (fscanf(temp, "%511[^\n]\n%d\n%9s", source_path, &is_directory, operation) < 2) {
         fclose(temp);
         unlink(temp_path);
@@ -489,60 +488,32 @@ void paste_from_clipboard(const char *target_directory, const char *filename) {
     fclose(temp);
     unlink(temp_path);
 
-    // Split filename into base and extension
-    char base_name[256] = "";
-    char extension[256] = "";
-    const char *last_dot = strrchr(filename, '.');
-    
-    if (last_dot) {
-        size_t base_len = last_dot - filename;
-        strncpy(base_name, filename, base_len);
-        base_name[base_len] = '\0';
-        strcpy(extension, last_dot); // Copy the dot and extension
-    } else {
-        strcpy(base_name, filename);
-    }
-
-    // Create destination path
-    char dest_path[512];
-    size_t path_len = snprintf(dest_path, sizeof(dest_path), "%s/%s%s", 
-            target_directory, base_name, extension);
-    
-    if (path_len >= sizeof(dest_path)) {
-        fprintf(stderr, "Error: Path too long.\n");
-        return;
-    }
-
-    // Handle name conflicts
-    int counter = 1;
-    while (access(dest_path, F_OK) == 0) {
-        path_len = snprintf(dest_path, sizeof(dest_path), "%s/%s%d%s", 
-                target_directory, base_name, counter, extension);
-        
-        if (path_len >= sizeof(dest_path)) {
-            fprintf(stderr, "Error: Path too long.\n");
-            return;
-        }
-        counter++;
-    }
-
     // Check if this is a cut operation
     bool is_cut = (operation[0] == 'C' && operation[1] == 'U' && operation[2] == 'T');
 
-    // Use mv for cut operations, cp for copy operations
-    char file_command[2048];
-    if (is_directory) {
-        snprintf(file_command, sizeof(file_command), "%s -r \"%s\" \"%s\"", 
-                is_cut ? "mv" : "cp", source_path, dest_path);
+    if (is_cut) {
+        // Get the temporary storage path
+        char temp_storage[MAX_PATH_LENGTH];
+        snprintf(temp_storage, sizeof(temp_storage), "/tmp/cupidfm_cut_storage_%d", getpid());
+        
+        // Move from temporary storage to target
+        char mv_command[2048];
+        snprintf(mv_command, sizeof(mv_command), "mv \"%s\" \"%s/%s\"", 
+                temp_storage, target_directory, filename);
+        
+        if (system(mv_command) == -1) {
+            fprintf(stderr, "Error: Unable to move file from temporary storage.\n");
+            return;
+        }
     } else {
-        snprintf(file_command, sizeof(file_command), "%s \"%s\" \"%s\"", 
-                is_cut ? "mv" : "cp", source_path, dest_path);
-    }
-    
-    if (system(file_command) == -1) {
-        fprintf(stderr, "Error: Unable to %s %s.\n", 
-                is_cut ? "move" : "copy", 
-                is_directory ? "directory" : "file");
+        // Handle regular copy operation as before
+        char cp_command[2048];
+        snprintf(cp_command, sizeof(cp_command), "cp %s \"%s\" \"%s/%s\"",
+                is_directory ? "-r" : "", source_path, target_directory, filename);
+        
+        if (system(cp_command) == -1) {
+            fprintf(stderr, "Error: Unable to copy file.\n");
+        }
     }
 }
 
@@ -580,7 +551,18 @@ void cut_and_paste(const char *path) {
     // Clean up
     unlink(temp_path);
 
-    // Note: We no longer delete the file here - it will be moved during paste operation
+    // Hide the file from the current view by moving it to a temporary location
+    char temp_storage[MAX_PATH_LENGTH];
+    snprintf(temp_storage, sizeof(temp_storage), "/tmp/cupidfm_cut_storage_%d", getpid());
+    
+    // Move the file to temporary storage
+    char mv_command[2048];
+    snprintf(mv_command, sizeof(mv_command), "mv \"%s\" \"%s\"", path, temp_storage);
+    
+    if (system(mv_command) == -1) {
+        fprintf(stderr, "Error: Unable to move file to temporary storage.\n");
+        return;
+    }
 }
 
 void delete_item(const char *path) {
