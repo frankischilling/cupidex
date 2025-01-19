@@ -97,9 +97,9 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
   - [ ] Add undo/redo functionality in edit mode
   - [ ] Implement proper text selection in edit mode
 - [ ] Add file operations:
-  - [ ] Copy/paste files and directories
+  - [X] Copy/paste files and directories
   - [ ] Create new file/directory
-  - [ ] Delete file/directory
+  - [X] Delete file/directory
   - [ ] Rename file/directory
 - [ ] Add a quick select feature for selecting file names, dir names, and current directory
 - [ ] Implement file search functionality
