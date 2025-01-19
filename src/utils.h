@@ -1,5 +1,8 @@
-// Must be signed
+#ifndef UTILS_H
+#define UTILS_H
+
 #include <stdbool.h>
+#include <ncurses.h>
 
 #define SIZE int
 
@@ -24,3 +27,6 @@ void copy_to_clipboard(const char *path);
 void paste_from_clipboard(const char *target_directory, const char *filename);
 void cut_and_paste(const char *path);
 void delete_item(const char *path);
+void confirm_delete(WINDOW *notifwin, const char *path, bool *should_delete);
+
+#endif // UTILS_H

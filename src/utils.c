@@ -588,3 +588,24 @@ void delete_item(const char *path) {
         }
     }
 }
+
+void confirm_delete(WINDOW *notifwin, const char *path, bool *should_delete) {
+    *should_delete = false;
+    
+    // Show confirmation prompt
+    werase(notifwin);
+    mvwprintw(notifwin, 0, 0, "Delete '%s'? (y/n): ", path);
+    wrefresh(notifwin);
+    
+    // Wait for user input
+    int ch;
+    while ((ch = wgetch(notifwin)) != ERR) {
+        ch = tolower(ch);
+        if (ch == 'y') {
+            *should_delete = true;
+            break;
+        } else if (ch == 'n') {
+            break;
+        }
+    }
+}

@@ -858,7 +858,6 @@ void *banner_scrolling_thread(void *arg) {
     return NULL;
 }
 
-// Add this to the cleanup section before program exit
 void cleanup_temp_files() {
     char command[1024];
     snprintf(command, sizeof(command), "rm -rf /tmp/cupidfm_*_%d", getpid());
@@ -1174,19 +1173,25 @@ int main() {
                         char full_path[MAX_PATH_LENGTH];
                         path_join(full_path, state.current_directory, state.selected_entry);
                         
-                        // Delete the item
-                        delete_item(full_path);
+                        bool should_delete = false;
+                        confirm_delete(notifwin, state.selected_entry, &should_delete);
                         
-                        // Reload directory to reflect changes
-                        reload_directory(&state.files, state.current_directory);
-                        state.dir_window_cas.num_files = Vector_len(state.files);
-                        
-                        // Update notification
-                        werase(notifwin);
-                        //mvwprintw(notifwin, 0, 0, "Deleted: %s", state.selected_entry);
-                        show_notification(notifwin, "Deleted: %s", state.selected_entry);
-                        wrefresh(notifwin);
-                        should_clear_notif = false;
+                        if (should_delete) {
+                            // Delete the item
+                            delete_item(full_path);
+                            
+                            // Reload directory to reflect changes
+                            reload_directory(&state.files, state.current_directory);
+                            state.dir_window_cas.num_files = Vector_len(state.files);
+                            
+                            // Update notification
+                            show_notification(notifwin, "Deleted: %s", state.selected_entry);
+                            should_clear_notif = false;
+                        } else {
+                            // User cancelled deletion
+                            show_notification(notifwin, "Delete cancelled");
+                            should_clear_notif = false;
+                        }
                     }
                     break;
                 default:
