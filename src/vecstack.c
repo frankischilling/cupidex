@@ -1,55 +1,67 @@
-// File: src/vecstack.c
-// -----------------------
-#include "vecstack.h" // for VecStack, VecStack_empty, VecStack_push, VecStack_pop, VecStack_peek, VecStack_bye
-/**
- * Function to create an empty VecStack
- *
- * @return an empty VecStack
- */
-VecStack VecStack_empty() {
-    VecStack r = {Vector_new(0)};
-    return r;
+// vecstack.c
+
+#include "vecstack.h"
+#include <stdlib.h> // For malloc, realloc, free
+#include <stdio.h>  // For fprintf, stderr
+
+#define INITIAL_CAPACITY 10
+
+void VecStack_init(VecStack *stack) {
+    if (stack == NULL) {
+        fprintf(stderr, "VecStack_init: Provided stack pointer is NULL.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    stack->size = 0;
+    stack->capacity = INITIAL_CAPACITY;
+    stack->items = malloc(sizeof(void*) * stack->capacity);
+    if (stack->items == NULL) {
+        fprintf(stderr, "VecStack_init: Memory allocation failed.\n");
+        exit(EXIT_FAILURE);
+    }
 }
-/**
- * Function to push an element onto the VecStack
- *
- * @param v the VecStack to push onto
- * @param el the element to push
- */
-void VecStack_push(VecStack *v, void *el) {
-    Vector_add(&v->v, 1);
-    v->v.el[Vector_len(v->v)] = el;
-    Vector_set_len(&v->v, Vector_len(v->v) + 1);
+
+void VecStack_push(VecStack *stack, void *item) {
+    if (stack == NULL) {
+        fprintf(stderr, "VecStack_push: Provided stack pointer is NULL.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Resize if necessary
+    if (stack->size == stack->capacity) {
+        stack->capacity *= 2;
+        void **new_items = realloc(stack->items, sizeof(void*) * stack->capacity);
+        if (new_items == NULL) {
+            fprintf(stderr, "VecStack_push: Memory reallocation failed.\n");
+            exit(EXIT_FAILURE);
+        }
+        stack->items = new_items;
+    }
+
+    stack->items[stack->size++] = item;
 }
-/**
- * Function to pop an element from the VecStack
- *
- * @param v the VecStack to pop from
- * @return the popped element
- */
-void *VecStack_pop(VecStack *v) {
-    if (Vector_len(v->v) < 1)
-        return NULL;
-    void *r = v->v.el[Vector_len(v->v) - 1];
-    Vector_set_len_no_free(&v->v, Vector_len(v->v) - 1);
-    return r;
+
+void *VecStack_pop(VecStack *stack) {
+    if (stack == NULL) {
+        fprintf(stderr, "VecStack_pop: Provided stack pointer is NULL.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (stack->size == 0) {
+        return NULL; // Stack is empty
+    }
+
+    return stack->items[--stack->size];
 }
-/**
- * Function to peek at the top element of the VecStack
- *
- * @param v the VecStack to peek at
- * @return the top element
- */
-void *VecStack_peek(VecStack *v) {
-    if (Vector_len(v->v) < 1)
-        return NULL;
-    return v->v.el[Vector_len(v->v) - 1];
-}
-/**
- * Function to free the memory allocated for a VecStack
- *
- * @param v the VecStack to free
- */
-void VecStack_bye(VecStack *v) {
-    Vector_bye(&v->v);
+
+void VecStack_bye(VecStack *stack) {
+    if (stack == NULL) {
+        fprintf(stderr, "VecStack_bye: Provided stack pointer is NULL.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    free(stack->items);
+    stack->items = NULL;
+    stack->size = 0;
+    stack->capacity = 0;
 }

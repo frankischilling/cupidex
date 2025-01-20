@@ -2,6 +2,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <stdbool.h>
+#include <stddef.h>
+
 typedef struct {
     int key_up;
     int key_down;
@@ -30,17 +33,19 @@ typedef struct {
 } KeyBindings;
 
 /**
- * Loads defaults if config file does not exist or if particular
- * bindings are not overridden by user. 
+ * Loads default keybindings into the provided KeyBindings structure.
  */
 void load_default_keybindings(KeyBindings *kb);
 
 /**
- * Attempt to parse a config file (e.g., "~/.cupidfmrc") and override
- * the defaults. If the file does not exist or is invalid, do nothing.
- *
- * Return `true` on success, `false` if file is not found or invalid.
+ * Loads user configuration from a file, overriding defaults.
+ * 
+ * @param kb           Pointer to KeyBindings structure to populate.
+ * @param filepath     Path to the configuration file.
+ * @param error_buffer Buffer to store error messages.
+ * @param buffer_size  Size of the error_buffer.
+ * @return             Number of errors encountered. 0 indicates success.
  */
-bool load_config_file(KeyBindings *kb, const char *filepath);
+int load_config_file(KeyBindings *kb, const char *filepath, char *error_buffer, size_t buffer_size);
 
 #endif // CONFIG_H

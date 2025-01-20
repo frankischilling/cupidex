@@ -12,9 +12,9 @@
 #include <string.h>    // for strlen, strcpy, strdup, strrchr, strtok, strncmp
 #include <signal.h>    // for signal, SIGWINCH
 #include <stdbool.h>   // for bool, true, false
-#include <string.h>    // For memset
+#include <ctype.h>     // for isspace, toupper
 #include <magic.h>     // For libmagic
-#include <time.h>      // For strftime
+#include <time.h>      // For strftime, clock_gettime
 #include <sys/ioctl.h> // For ioctl
 #include <termios.h>   // For resize_term
 #include <pthread.h>   // For threading
@@ -34,6 +34,8 @@
 #define CTRL_E 5
 #define BANNER_SCROLL_INTERVAL 250000  // Microseconds between scroll updates (250ms)
 #define INPUT_CHECK_INTERVAL 10        // Milliseconds for input checking (10ms)
+#define ERROR_BUFFER_SIZE 2048         // Increased buffer size for error messages
+#define NOTIFICATION_TIMEOUT_MS 250    // 250ms timeout for notifications
 
 // Global variable definitions
 const char *BANNER_TEXT = "Welcome to CupidFM - Press F1 to exit";
@@ -49,15 +51,14 @@ struct timespec last_notification_time = {0, 0};
 volatile sig_atomic_t resized = 0;
 volatile sig_atomic_t is_editing = 0;
 
-// Global variables
-WINDOW *notifwin;
-WINDOW *mainwin;
-WINDOW *dirwin;
-WINDOW *previewwin;
-WINDOW *bannerwin;
+// Other global windows
+WINDOW *mainwin = NULL;
+WINDOW *dirwin = NULL;
+WINDOW *previewwin = NULL;
 
 VecStack directoryStack;
 
+// Typedefs and Structures
 typedef struct {
     SIZE start;
     SIZE cursor;
@@ -76,6 +77,8 @@ typedef struct {
 
 // Forward declaration of fix_cursor
 void fix_cursor(CursorAndSlice *cas);
+
+// Function Implementations
 
 void show_notification(WINDOW *win, const char *format, ...) {
     va_list args;
@@ -217,42 +220,15 @@ void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *l
         magic_close(magic_cookie);
     }
 }
-/** Function to update the directory stack with the new directory
- *
- * @param newDirectory the new directory to push onto the stack
- */
-void updateDirectoryStack(const char *newDirectory) {
-    char *token;
-    char *copy = strdup(newDirectory);
 
-    // Push each directory onto the stack
-    for (token = strtok(copy, "/"); token; token = strtok(NULL, "/")) {
-        VecStack_push(&directoryStack, strdup(token));
-    }
-
-    free(copy);
-}
-/** Function to draw the directory window
- *
- * @param window the window to draw the directory in
- * @param directory the current directory
- * @param files the list of files in the directory
- * @param files_len the number of files in the directory
- * @param selected_entry the index of the selected entry
- */
 bool is_hidden(const char *filename) {
     return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
 }
+
 /** Function to get the total number of lines in a file
  *
  * @param file_path the path to the file
  * @return the total number of lines in the file
- */
-
-/** Function to get the total number of lines in a file
- *
- * @param file_path
- * @return total_lines number of lines in the file
  */
 int get_total_lines(const char *file_path) {
     FILE *file = fopen(file_path, "r");
@@ -267,15 +243,8 @@ int get_total_lines(const char *file_path) {
     fclose(file);
     return total_lines;
 }
-// tab / clicking on the different windows will move the cursor to that window, will be used later for editing files
-/** Function to draw the directory window
- *
- * @param window the window to draw the directory in
- * @param directory the current directory
- * @param files the list of files in the directory
- * @param files_len the number of files in the directory
- * @param selected_entry the index of the selected entry
- */
+
+// Function to draw the directory window
 void draw_directory_window(
         WINDOW *window,
         const char *directory,
@@ -362,6 +331,7 @@ void draw_directory_window(
     mvwprintw(window, 0, 2, "Directory: %.*s", cols - 13, directory);
     wrefresh(window);
 }
+
 /** Function to draw the preview window
  *
  * @param window the window to draw the preview in
@@ -387,6 +357,7 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     struct stat file_stat;
     if (stat(file_path, &file_stat) == -1) {
         mvwprintw(window, 2, 2, "Unable to retrieve file information");
+        wrefresh(window);
         return;
     }
     
@@ -463,6 +434,7 @@ void draw_preview_window(WINDOW *window, const char *current_directory, const ch
     // Refresh to show changes
     wrefresh(window);
 }
+
 /** Function to handle cursor movement in the directory window
  * @param cas the cursor and slice state
  */
@@ -485,6 +457,7 @@ void fix_cursor(CursorAndSlice *cas) {
     cas->start = MIN(cas->start, cas->num_files - visible_lines);
     cas->start = MAX(0, cas->start);
 }
+
 /** Function to redraw all windows
  *
  * @param state the application state
@@ -583,6 +556,7 @@ void reload_directory(Vector *files, const char *current_directory) {
     // Makes the vector shorter
     Vector_sane_cap(files);
 }
+
 /** Function to navigate up in the directory window
  *
  * @param cas the cursor and slice state
@@ -609,6 +583,7 @@ void navigate_up(CursorAndSlice *cas, const Vector *files, const char **selected
         *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
     }
 }
+
 /** Function to navigate down in the directory window
  *
  * @param cas the cursor and slice state
@@ -635,11 +610,13 @@ void navigate_down(CursorAndSlice *cas, const Vector *files, const char **select
         *selected_entry = FileAttr_get_name(files->el[cas->cursor]);
     }
 }
+
 /** Function to navigate left in the directory window
  *
  * @param current_directory the current directory
  * @param files the list of files
  * @param cas the cursor and slice state
+ * @param state the application state
  */
 void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_window_cas, AppState *state) {
     // Check if the current directory is the root directory
@@ -660,7 +637,10 @@ void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_
     }
 
     // Pop the last directory from the stack
-    free(VecStack_pop(&directoryStack));
+    char *popped_dir = VecStack_pop(&directoryStack);
+    if (popped_dir) {
+        free(popped_dir);
+    }
 
     // Reset cursor and start position
     dir_window_cas->cursor = 0;
@@ -668,7 +648,7 @@ void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_
     dir_window_cas->num_lines = LINES - 5;
     dir_window_cas->num_files = Vector_len(*files);
 
-    // **NEW CODE**: Set selected_entry to the first file in the parent directory
+    // Set selected_entry to the first file in the parent directory
     if (dir_window_cas->num_files > 0) {
         state->selected_entry = FileAttr_get_name(files->el[0]);
     } else {
@@ -676,13 +656,12 @@ void navigate_left(char **current_directory, Vector *files, CursorAndSlice *dir_
     }
 
     werase(notifwin);
-    //mvwprintw(notifwin, 0, 0, "Navigated to parent directory: %s", *current_directory);
-    
     show_notification(notifwin, "Navigated to parent directory: %s", *current_directory);
     should_clear_notif = false;
     
     wrefresh(notifwin);
 }
+
 /** Function to navigate right in the directory window
  *
  * @param state the application state
@@ -696,7 +675,6 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
     FileAttr current_file = files->el[dir_window_cas->cursor];
     if (!FileAttr_is_dir(current_file)) {
         werase(notifwin);
-        //mvwprintw(notifwin, 0, 0, "Selected entry is not a directory");
         show_notification(notifwin, "Selected entry is not a directory");
         should_clear_notif = false;
 
@@ -711,11 +689,9 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
     // Check if we’re not re-entering the same directory path
     if (strcmp(new_path, *current_directory) == 0) {
         werase(notifwin);
-        //mvwprintw(notifwin, 0, 0, "Already in this directory");
         show_notification(notifwin, "Already in this directory");
-
+        should_clear_notif = false;
         wrefresh(notifwin);
-                should_clear_notif = false;
         return;
     }
 
@@ -748,7 +724,7 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
     dir_window_cas->num_lines = LINES - 5;
     dir_window_cas->num_files = Vector_len(*files);
 
-    // **NEW CODE**: Set selected_entry to the first file in the new directory
+    // Set selected_entry to the first file in the new directory
     if (dir_window_cas->num_files > 0) {
         state->selected_entry = FileAttr_get_name(files->el[0]);
     } else {
@@ -761,13 +737,12 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
     }
 
     werase(notifwin);
-    //mvwprintw(notifwin, 0, 0, "Entered directory: %s", state->selected_entry);
-    
     show_notification(notifwin, "Entered directory: %s", state->selected_entry);
     should_clear_notif = false;    
     
     wrefresh(notifwin);
 }
+
 /** Function to handle terminal window resize
  *
  * @param sig the signal number
@@ -778,6 +753,7 @@ void handle_winch(int sig) {
         resized = 1;
     }
 }
+
 /**
  * Function to draw and scroll the banner text
  *
@@ -913,6 +889,9 @@ int main() {
     // Initialize ncurses
     setlocale(LC_ALL, "");
     
+    // Initialize directory stack
+    VecStack_init(&directoryStack);
+
     // Ignore Ctrl+C at the OS level so we can handle it ourselves
     struct sigaction sa;
     sa.sa_handler = SIG_IGN;      // SIG_IGN means "ignore this signal"
@@ -928,7 +907,7 @@ int main() {
     // Initialize ncurses
     initscr();
     noecho();
-    raw();   // or raw() if you prefer raw mode
+    raw();   // or cbreak() if you prefer
     keypad(stdscr, TRUE);
     curs_set(0);
     timeout(100);
@@ -937,7 +916,7 @@ int main() {
     int notif_height = 1;
     int banner_height = 3;
 
-    // Initialize notif windows
+    // Initialize notif window
     notifwin = newwin(notif_height, COLS, LINES - notif_height, 0);
     werase(notifwin);
     box(notifwin, 0, 0);
@@ -945,7 +924,8 @@ int main() {
 
     // Initialize banner window
     bannerwin = newwin(banner_height, COLS, 0, 0);
-    wbkgd(bannerwin, COLOR_PAIR(1)); // Set background color
+    // Assuming COLOR_PAIR(1) is defined elsewhere; if not, remove or define it
+    // wbkgd(bannerwin, COLOR_PAIR(1)); // Set background color
     box(bannerwin, 0, 0);
     wrefresh(bannerwin);
 
@@ -962,7 +942,7 @@ int main() {
         preview_win_width = COLS - dir_win_width;
     }
 
-    dirwin = subwin(mainwin, LINES - banner_height - notif_height, dir_win_width, banner_height, 0);
+    dirwin = subwin(mainwin, LINES - banner_height - notif_height, dir_win_width - 1, banner_height, 0);
     box(dirwin, 0, 0);
     wrefresh(dirwin);
 
@@ -970,7 +950,7 @@ int main() {
     box(previewwin, 0, 0);
     wrefresh(previewwin);
 
-    // init keybinds and configs
+    // Initialize keybindings and configs
     KeyBindings kb;
     load_default_keybindings(&kb);
 
@@ -982,56 +962,73 @@ int main() {
     }
     snprintf(config_path, sizeof(config_path), "%s/.cupidfmrc", home);
 
-    // 2) Try to load user’s config file
-    bool loaded_user_conf = load_config_file(&kb, config_path);
+    // Initialize an error buffer to capture error messages
+    char error_buffer[ERROR_BUFFER_SIZE] = {0};
+    
+    // Load the user configuration, capturing any errors
+    int config_errors = load_config_file(&kb, config_path, error_buffer, sizeof(error_buffer));
 
-    // 3) If no config found, create one with defaults and notify user
-    if (!loaded_user_conf) {
-        // We will create a new config file
+    if (config_errors == 0) {
+        // Configuration loaded successfully
+        show_notification(notifwin, "Configuration loaded successfully.");
+    } else if (config_errors == 1 && strstr(error_buffer, "Configuration file not found")) {
+        // Configuration file not found; create a default config file
         FILE *fp = fopen(config_path, "w");
         if (fp) {
-                fprintf(fp, "# CupidFM Configuration File\n");
-                fprintf(fp, "# Automatically generated on first run.\n\n");
+            fprintf(fp, "# CupidFM Configuration File\n");
+            fprintf(fp, "# Automatically generated on first run.\n\n");
 
-                // Navigation Keys
-                fprintf(fp, "key_up=KEY_UP\n");
-                fprintf(fp, "key_down=KEY_DOWN\n");
-                fprintf(fp, "key_left=KEY_LEFT\n");
-                fprintf(fp, "key_right=KEY_RIGHT\n");
-                fprintf(fp, "key_tab=Tab\n");
-                fprintf(fp, "key_exit=F1\n");
+            // Navigation Keys
+            fprintf(fp, "key_up=KEY_UP\n");
+            fprintf(fp, "key_down=KEY_DOWN\n");
+            fprintf(fp, "key_left=KEY_LEFT\n");
+            fprintf(fp, "key_right=KEY_RIGHT\n");
+            fprintf(fp, "key_tab=Tab\n");
+            fprintf(fp, "key_exit=F1\n");
 
-                // File Management
-                fprintf(fp, "key_edit=^E  # Enter edit mode\n");
-                fprintf(fp, "key_copy=^C  # Copy selected file\n");
-                fprintf(fp, "key_paste=^V  # Paste copied file\n");
-                fprintf(fp, "key_cut=^X  # Cut (move) file\n");
-                fprintf(fp, "key_delete=^D  # Delete selected file\n");
-                fprintf(fp, "key_rename=^R  # Rename file\n");
-                fprintf(fp, "key_new=^N  # Create new file\n");
-                fprintf(fp, "\n");
-                // Editing Mode Keys
-                fprintf(fp, "edit_up=KEY_UP\n");
-                fprintf(fp, "edit_down=KEY_DOWN\n");
-                fprintf(fp, "edit_left=KEY_LEFT\n");
-                fprintf(fp, "edit_right=KEY_RIGHT\n");
-                fprintf(fp, "edit_save=^S # Save in editor\n");
-                fprintf(fp, "edit_quit=^Q # Quit editor\n");
-                fprintf(fp, "edit_backspace=KEY_BACKSPACE");
+            // File Management
+            fprintf(fp, "key_edit=^E  # Enter edit mode\n");
+            fprintf(fp, "key_copy=^C  # Copy selected file\n");
+            fprintf(fp, "key_paste=^V  # Paste copied file\n");
+            fprintf(fp, "key_cut=^X  # Cut (move) file\n");
+            fprintf(fp, "key_delete=^D  # Delete selected file\n");
+            fprintf(fp, "key_rename=^R  # Rename file\n");
+            fprintf(fp, "key_new=^N  # Create new file\n");
+            fprintf(fp, "key_save=^S  # Save changes\n\n");
 
-                fclose(fp);
-            }
+            // Editing Mode Keys
+            fprintf(fp, "edit_up=KEY_UP\n");
+            fprintf(fp, "edit_down=KEY_DOWN\n");
+            fprintf(fp, "edit_left=KEY_LEFT\n");
+            fprintf(fp, "edit_right=KEY_RIGHT\n");
+            fprintf(fp, "edit_save=^S # Save in editor\n");
+            fprintf(fp, "edit_quit=^Q # Quit editor\n");
+            fprintf(fp, "edit_backspace=KEY_BACKSPACE\n");
 
-    // We'll notify the user with an ncurses "popup." We can only do this
-    // *after* initscr() has been called. So below, in main() after `initscr()`,
-    // call show_popup().
-    show_popup("First Run Setup",
-            "No config was found.\n"
-            "A default config has been created at:\n\n"
-            "  %s\n\n"
-            "Press any key to continue...",
-            config_path);
+            fclose(fp);
+
+            // Notify the user about the creation of the default config file
+            show_popup("First Run Setup",
+                "No config was found.\n"
+                "A default config has been created at:\n\n"
+                "  %s\n\n"
+                "Press any key to continue...",
+                config_path);
+        } else {
+            // Failed to create the config file
+            show_notification(notifwin, "Failed to create default configuration file.");
+        }
+    } else {
+        // Configuration file exists but has errors; display the error messages
+        show_popup("Configuration Errors",
+            "There were issues loading your configuration:\n\n%s\n\n"
+            "Press any key to continue with default settings.",
+            error_buffer);
+        
+        // Optionally, you can decide whether to proceed with defaults or halt execution
+        // For now, we'll proceed with whatever was loaded and keep defaults for invalid entries
     }
+
     // Initialize application state
     AppState state;
     state.current_directory = malloc(MAX_PATH_LENGTH);
@@ -1065,16 +1062,16 @@ int main() {
     // Initial drawing
     redraw_all_windows(&state);
 
-	// Set a separate timeout for mainwin to handle scrolling
-	wtimeout(mainwin, INPUT_CHECK_INTERVAL);  // Set shorter timeout for input checking
+    // Set a separate timeout for mainwin to handle scrolling
+    wtimeout(mainwin, INPUT_CHECK_INTERVAL);  // Set shorter timeout for input checking
 
     // Initialize scrolling variables
     int banner_offset = 0;
     struct timespec last_update_time;
     clock_gettime(CLOCK_MONOTONIC, &last_update_time);
 
-	// Calculate the total scroll length for the banner
-	int total_scroll_length = COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 4;
+    // Calculate the total scroll length for the banner
+    int total_scroll_length = COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 4;
 
     int ch;
     while ((ch = getch()) != kb.key_exit) {
@@ -1388,8 +1385,12 @@ int main() {
     delwin(previewwin);
     delwin(notifwin);
     delwin(mainwin);
+    delwin(bannerwin);
     endwin();
     cleanup_temp_files();
+
+    // Destroy directory stack
+    VecStack_bye(&directoryStack);
 
     return 0;
 }
