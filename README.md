@@ -75,7 +75,7 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 
 ### Default Keybindings
 
-cupidfm comes with a set of **default keybindings**. On **first run**, if CupidFM cannot find a user configuration file, it will **auto-generate** one at:
+cupidfm comes with a set of **default keybindings**. On **first run**, if cupidfm cannot find a user configuration file, it will **auto-generate** one at:
 
 ```
 ~/.cupidfmrc
