@@ -28,5 +28,7 @@ void paste_from_clipboard(const char *target_directory, const char *filename);
 void cut_and_paste(const char *path);
 void delete_item(const char *path);
 void confirm_delete(WINDOW *notifwin, const char *path, bool *should_delete);
+void rename_item(WINDOW *notifwin, const char *old_path);
+void create_new_file(WINDOW *notifwin, const char *current_dir);
 
 #endif // UTILS_H

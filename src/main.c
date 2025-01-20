@@ -1194,6 +1194,47 @@ int main() {
                         }
                     }
                     break;
+                case 18:  // Ctrl+R
+                    if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
+                        char full_path[MAX_PATH_LENGTH];
+                        path_join(full_path, state.current_directory, state.selected_entry);
+
+                        // Call rename_item
+                        rename_item(notifwin, full_path);
+
+                        // After renaming, reload the directory so the change is visible:
+                        reload_directory(&state.files, state.current_directory);
+                        state.dir_window_cas.num_files = Vector_len(state.files);
+
+                        // Possibly reset cursor etc.
+                        if (state.dir_window_cas.num_files > 0) {
+                            state.dir_window_cas.cursor = 0;
+                            state.dir_window_cas.start = 0;
+                            state.selected_entry = FileAttr_get_name(state.files.el[0]);
+                        } else {
+                            state.selected_entry = "";
+                        }
+                    }
+                    break;
+                case 14:  // Ctrl+N
+                    if (active_window == DIRECTORY_WIN_ACTIVE) {
+                        // 1. Call create_new_file
+                        create_new_file(notifwin, state.current_directory);
+
+                        // 2. Reload directory so the new file shows up
+                        reload_directory(&state.files, state.current_directory);
+                        state.dir_window_cas.num_files = Vector_len(state.files);
+
+                        // 3. Reset cursor, etc., if desired
+                        if (state.dir_window_cas.num_files > 0) {
+                            state.dir_window_cas.cursor = 0;
+                            state.dir_window_cas.start = 0;
+                            state.selected_entry = FileAttr_get_name(state.files.el[0]);
+                        } else {
+                            state.selected_entry = "";
+                        }
+                    }
+                    break;
                 default:
                     break;
             }
