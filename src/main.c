@@ -27,6 +27,7 @@
 #include "vecstack.h"
 #include "main.h"
 #include "globals.h"
+#include "config.h"
 
 #define MAX_DISPLAY_LENGTH 32
 #define TAB 9
@@ -864,6 +865,45 @@ void cleanup_temp_files() {
     system(command);
 }
 
+static void show_popup(const char *title, const char *fmt, ...) {
+    // We use a small window in the center of the screen
+    int rows = 10;
+    int cols = 60;
+
+    // If not initialized, do it. Usually you have initscr() done already.
+    if (!stdscr) initscr();
+
+    // Center the popup
+    int starty = (LINES - rows) / 2;
+    int startx = (COLS - cols) / 2;
+
+    // Create the window
+    WINDOW *popup = newwin(rows, cols, starty, startx);
+    box(popup, 0, 0);
+
+    // Print a title in bold near the top
+    wattron(popup, A_BOLD);
+    mvwprintw(popup, 0, 2, "[ %s ]", title);
+    wattroff(popup, A_BOLD);
+
+    // Use varargs to display your custom message
+    va_list args;
+    va_start(args, fmt);
+    // Start printing text a few rows down so it’s readable
+    wmove(popup, 2, 2);
+    vw_printw(popup, fmt, args);
+    va_end(args);
+
+    // Refresh so the user sees it
+    wrefresh(popup);
+
+    // Wait for one key press
+    wgetch(popup);
+
+    // Cleanup
+    delwin(popup);
+}
+
 /** Function to handle cleanup and exit
  *
  * @param r the exit code
@@ -930,6 +970,68 @@ int main() {
     box(previewwin, 0, 0);
     wrefresh(previewwin);
 
+    // init keybinds and configs
+    KeyBindings kb;
+    load_default_keybindings(&kb);
+
+    char config_path[1024];
+    const char *home = getenv("HOME");
+    if (!home) {
+        // Fallback if $HOME is not set
+        home = ".";
+    }
+    snprintf(config_path, sizeof(config_path), "%s/.cupidfmrc", home);
+
+    // 2) Try to load user’s config file
+    bool loaded_user_conf = load_config_file(&kb, config_path);
+
+    // 3) If no config found, create one with defaults and notify user
+    if (!loaded_user_conf) {
+        // We will create a new config file
+        FILE *fp = fopen(config_path, "w");
+        if (fp) {
+                fprintf(fp, "# CupidFM Configuration File\n");
+                fprintf(fp, "# Automatically generated on first run.\n\n");
+
+                // Navigation Keys
+                fprintf(fp, "key_up=KEY_UP\n");
+                fprintf(fp, "key_down=KEY_DOWN\n");
+                fprintf(fp, "key_left=KEY_LEFT\n");
+                fprintf(fp, "key_right=KEY_RIGHT\n");
+                fprintf(fp, "key_tab=Tab\n");
+                fprintf(fp, "key_exit=F1\n");
+
+                // File Management
+                fprintf(fp, "key_edit=^E  # Enter edit mode\n");
+                fprintf(fp, "key_copy=^C  # Copy selected file\n");
+                fprintf(fp, "key_paste=^V  # Paste copied file\n");
+                fprintf(fp, "key_cut=^X  # Cut (move) file\n");
+                fprintf(fp, "key_delete=^D  # Delete selected file\n");
+                fprintf(fp, "key_rename=^R  # Rename file\n");
+                fprintf(fp, "key_new=^N  # Create new file\n");
+                fprintf(fp, "\n");
+                // Editing Mode Keys
+                fprintf(fp, "edit_up=KEY_UP\n");
+                fprintf(fp, "edit_down=KEY_DOWN\n");
+                fprintf(fp, "edit_left=KEY_LEFT\n");
+                fprintf(fp, "edit_right=KEY_RIGHT\n");
+                fprintf(fp, "edit_save=^S # Save in editor\n");
+                fprintf(fp, "edit_quit=^Q # Quit editor\n");
+                fprintf(fp, "edit_backspace=KEY_BACKSPACE");
+
+                fclose(fp);
+            }
+
+    // We'll notify the user with an ncurses "popup." We can only do this
+    // *after* initscr() has been called. So below, in main() after `initscr()`,
+    // call show_popup().
+    show_popup("First Run Setup",
+            "No config was found.\n"
+            "A default config has been created at:\n\n"
+            "  %s\n\n"
+            "Press any key to continue...",
+            config_path);
+    }
     // Initialize application state
     AppState state;
     state.current_directory = malloc(MAX_PATH_LENGTH);
@@ -974,14 +1076,13 @@ int main() {
 	// Calculate the total scroll length for the banner
 	int total_scroll_length = COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 4;
 
-	int ch;
-    while ((ch = getch()) != KEY_F(1)) {
+    int ch;
+    while ((ch = getch()) != kb.key_exit) {
         if (resized) {
             resized = 0;
             redraw_all_windows(&state);
             continue;
         }
-
         // Check if enough time has passed to update the banner
         struct timespec current_time;
         clock_gettime(CLOCK_MONOTONIC, &current_time);
@@ -1006,238 +1107,242 @@ int main() {
         }
 
         if (ch != ERR) {
-            switch (ch) {
-                case KEY_UP:
-                    if (active_window == DIRECTORY_WIN_ACTIVE) {
-                        navigate_up(&state.dir_window_cas, &state.files, &state.selected_entry);
-                        state.preview_start_line = 0;
-                        werase(notifwin);
-                        //mvwprintw(notifwin, 0, 0, "Moved up");
 
-                        show_notification(notifwin, "Moved up");
-
-                        wrefresh(notifwin);
-                        should_clear_notif = false;
-                    } else if (active_window == PREVIEW_WIN_ACTIVE) {
-                        if (state.preview_start_line > 0) {
-                            state.preview_start_line--;
-                            werase(notifwin);
-                            show_notification(notifwin, "Scrolled up");
-                            wrefresh(notifwin);
-                            should_clear_notif = false;
-                        }
-                    }
-                    break;
-                case KEY_DOWN:
-                    if (active_window == DIRECTORY_WIN_ACTIVE) {
-                        navigate_down(&state.dir_window_cas, &state.files, &state.selected_entry);
-                        state.preview_start_line = 0;
-                        werase(notifwin);
-                        //mvwprintw(notifwin, 0, 0, "Moved down");
-                        show_notification(notifwin, "Moved down");
-                        wrefresh(notifwin);
-                        should_clear_notif = false;
-                    } else if (active_window == PREVIEW_WIN_ACTIVE) {
-                        // Determine the total lines in the file
-                        char file_path[MAX_PATH_LENGTH];
-                        path_join(file_path, state.current_directory, state.selected_entry);
-                        int total_lines = get_total_lines(file_path);
-
-                        // Get window dimensions to calculate max_start_line
-                        int max_x, max_y;
-                        getmaxyx(previewwin, max_y, max_x);
-                        (void)max_x;
-
-                        int content_height = max_y - 7;
-
-                        int max_start_line = total_lines - content_height;
-                        if (max_start_line < 0) max_start_line = 0;
-
-                        if (state.preview_start_line < max_start_line) {
-                            state.preview_start_line++;
-                            werase(notifwin);
-                            //mvwprintw(notifwin, 0, 0, "Scrolled down");
-                            show_notification(notifwin, "Scrolled down");
-                            wrefresh(notifwin);
-                            should_clear_notif = false;
-                        }
-                    }
-                    break;
-                case KEY_LEFT:
-                    if (active_window == DIRECTORY_WIN_ACTIVE) {
-                        navigate_left(&state.current_directory, &state.files, &state.dir_window_cas, &state);
-                        state.preview_start_line = 0;
-                        werase(notifwin);
-                        //mvwprintw(notifwin, 0, 0, "Navigated to parent directory");
-                        show_notification(notifwin, "Navigated to parent directory");
-                        wrefresh(notifwin);
-                        should_clear_notif = false;
-                    }
-                    break;
-                    // In the main loop after navigating right
-                case KEY_RIGHT:
-                    if (active_window == DIRECTORY_WIN_ACTIVE) {
-                        if (FileAttr_is_dir(state.files.el[state.dir_window_cas.cursor])) {
-                            navigate_right(&state, &state.current_directory, state.selected_entry, &state.files, &state.dir_window_cas);
-                            state.preview_start_line = 0;
-
-                            // Automatically set selected_entry if there is only one option
-                            if (state.dir_window_cas.num_files == 1) {
-                                state.selected_entry = FileAttr_get_name(state.files.el[0]);
-                            }
-
-                            werase(notifwin);
-                            //mvwprintw(notifwin, 0, 0, "Entered directory: %s", state.selected_entry);
-                            show_notification(notifwin, "Entered directory: %s", state.selected_entry);
-                            wrefresh(notifwin);
-                            should_clear_notif = false;
-                        } else {
-                            werase(notifwin);
-                            //mvwprintw(notifwin, 0, 0, "Selected entry is not a directory");
-                            show_notification(notifwin, "Selected entry is not a directory");
-                            wrefresh(notifwin);
-                            should_clear_notif = false;
-                        }
-                    }
-                    break;
-                case TAB:
-                    active_window = (active_window == DIRECTORY_WIN_ACTIVE) ? PREVIEW_WIN_ACTIVE : DIRECTORY_WIN_ACTIVE;
-                    if (active_window == DIRECTORY_WIN_ACTIVE) {
-                        state.preview_start_line = 0;
-                    }
+            // 1) UP
+            if (ch == kb.key_up) {
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
+                    navigate_up(&state.dir_window_cas, &state.files, &state.selected_entry);
+                    state.preview_start_line = 0;
                     werase(notifwin);
-                    //mvwprintw(notifwin, 0, 0, "Switched to %s window", (active_window == DIRECTORY_WIN_ACTIVE) ? "Directory" : "Preview");
-                    show_notification(notifwin, "Switched to %s window", (active_window == DIRECTORY_WIN_ACTIVE) ? "Directory" : "Preview");
+                    show_notification(notifwin, "Moved up");
                     wrefresh(notifwin);
                     should_clear_notif = false;
-                    break;
-                case CTRL_E:
-                    if (active_window == PREVIEW_WIN_ACTIVE) {
-                        char file_path[MAX_PATH_LENGTH];
-                        path_join(file_path, state.current_directory, state.selected_entry);
-                        edit_file_in_terminal(previewwin, file_path, notifwin);
-                        state.preview_start_line = 0;
+                } else if (active_window == PREVIEW_WIN_ACTIVE) {
+                    if (state.preview_start_line > 0) {
+                        state.preview_start_line--;
                         werase(notifwin);
-                        //mvwprintw(notifwin, 0, 0, "Editing file: %s", state.selected_entry);
-                        show_notification(notifwin, "Editing file: %s", state.selected_entry);
+                        show_notification(notifwin, "Scrolled up");
                         wrefresh(notifwin);
                         should_clear_notif = false;
                     }
-                    break;
-                case 3:  // Ctrl+C
-                    if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
-                        char full_path[MAX_PATH_LENGTH];
-                        path_join(full_path, state.current_directory, state.selected_entry);
-                        copy_to_clipboard(full_path);
-                        strncpy(copied_filename, state.selected_entry, MAX_PATH_LENGTH);
-                        werase(notifwin);
-                        //mvwprintw(notifwin, 0, 0, "Copied to clipboard: %s", state.selected_entry);
-                        show_notification(notifwin, "Copied to clipboard: %s", state.selected_entry);
-                        wrefresh(notifwin);
-                        should_clear_notif = false;
-                    }
-                    break;
-                case 22:  // Ctrl+V
-                    if (active_window == DIRECTORY_WIN_ACTIVE && copied_filename[0] != '\0') {
-                        paste_from_clipboard(state.current_directory, copied_filename);
-                        reload_directory(&state.files, state.current_directory);
-                        state.dir_window_cas.num_files = Vector_len(state.files);
-                        werase(notifwin);
-                        //mvwprintw(notifwin, 0, 0, "Pasted file: %s", copied_filename);
-                        show_notification(notifwin, "Pasted file: %s", copied_filename);
-                        wrefresh(notifwin);
-                        should_clear_notif = false;
-                    }
-                    break;
-                case 24:  // Ctrl+X
-                    if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
-                        char full_path[MAX_PATH_LENGTH];
-                        path_join(full_path, state.current_directory, state.selected_entry);
-                        cut_and_paste(full_path);
-                        strncpy(copied_filename, state.selected_entry, MAX_PATH_LENGTH);
-                        
-                        // Reload directory to reflect the cut file
-                        reload_directory(&state.files, state.current_directory);
-                        state.dir_window_cas.num_files = Vector_len(state.files);
-                        
-                        // Update notification
-                        werase(notifwin);
-                        //mvwprintw(notifwin, 0, 0, "Cut to clipboard: %s", state.selected_entry);
-                        show_notification(notifwin, "Cut to clipboard: %s", state.selected_entry);
-                        wrefresh(notifwin);
-                        should_clear_notif = false;
-                    }
-                    break;
-                case 4:  // Control+D
-                    if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
-                        char full_path[MAX_PATH_LENGTH];
-                        path_join(full_path, state.current_directory, state.selected_entry);
-                        
-                        bool should_delete = false;
-                        confirm_delete(notifwin, state.selected_entry, &should_delete);
-                        
-                        if (should_delete) {
-                            // Delete the item
-                            delete_item(full_path);
-                            
-                            // Reload directory to reflect changes
-                            reload_directory(&state.files, state.current_directory);
-                            state.dir_window_cas.num_files = Vector_len(state.files);
-                            
-                            // Update notification
-                            show_notification(notifwin, "Deleted: %s", state.selected_entry);
-                            should_clear_notif = false;
-                        } else {
-                            // User cancelled deletion
-                            show_notification(notifwin, "Delete cancelled");
-                            should_clear_notif = false;
-                        }
-                    }
-                    break;
-                case 18:  // Ctrl+R
-                    if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
-                        char full_path[MAX_PATH_LENGTH];
-                        path_join(full_path, state.current_directory, state.selected_entry);
-
-                        // Call rename_item
-                        rename_item(notifwin, full_path);
-
-                        // After renaming, reload the directory so the change is visible:
-                        reload_directory(&state.files, state.current_directory);
-                        state.dir_window_cas.num_files = Vector_len(state.files);
-
-                        // Possibly reset cursor etc.
-                        if (state.dir_window_cas.num_files > 0) {
-                            state.dir_window_cas.cursor = 0;
-                            state.dir_window_cas.start = 0;
-                            state.selected_entry = FileAttr_get_name(state.files.el[0]);
-                        } else {
-                            state.selected_entry = "";
-                        }
-                    }
-                    break;
-                case 14:  // Ctrl+N
-                    if (active_window == DIRECTORY_WIN_ACTIVE) {
-                        // 1. Call create_new_file
-                        create_new_file(notifwin, state.current_directory);
-
-                        // 2. Reload directory so the new file shows up
-                        reload_directory(&state.files, state.current_directory);
-                        state.dir_window_cas.num_files = Vector_len(state.files);
-
-                        // 3. Reset cursor, etc., if desired
-                        if (state.dir_window_cas.num_files > 0) {
-                            state.dir_window_cas.cursor = 0;
-                            state.dir_window_cas.start = 0;
-                            state.selected_entry = FileAttr_get_name(state.files.el[0]);
-                        } else {
-                            state.selected_entry = "";
-                        }
-                    }
-                    break;
-                default:
-                    break;
+                }
             }
+
+            // 2) DOWN
+            else if (ch == kb.key_down) {
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
+                    navigate_down(&state.dir_window_cas, &state.files, &state.selected_entry);
+                    state.preview_start_line = 0;
+                    werase(notifwin);
+                    show_notification(notifwin, "Moved down");
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
+                } else if (active_window == PREVIEW_WIN_ACTIVE) {
+                    // Determine total lines for scrolling in the preview
+                    char file_path[MAX_PATH_LENGTH];
+                    path_join(file_path, state.current_directory, state.selected_entry);
+                    int total_lines = get_total_lines(file_path);
+
+                    int max_x, max_y;
+                    getmaxyx(previewwin, max_y, max_x);
+                    (void) max_x;
+                    int content_height = max_y - 7;
+                    int max_start_line = total_lines - content_height;
+                    if (max_start_line < 0) max_start_line = 0;
+
+                    if (state.preview_start_line < max_start_line) {
+                        state.preview_start_line++;
+                        werase(notifwin);
+                        show_notification(notifwin, "Scrolled down");
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    }
+                }
+            }
+
+            // 3) LEFT
+            else if (ch == kb.key_left) {
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
+                    navigate_left(&state.current_directory,
+                                &state.files,
+                                &state.dir_window_cas,
+                                &state);
+                    state.preview_start_line = 0;
+                    werase(notifwin);
+                    show_notification(notifwin, "Navigated to parent directory");
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
+                }
+            }
+
+            // 4) RIGHT
+            else if (ch == kb.key_right) {
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
+                    if (FileAttr_is_dir(state.files.el[state.dir_window_cas.cursor])) {
+                        navigate_right(&state,
+                                    &state.current_directory,
+                                    state.selected_entry,
+                                    &state.files,
+                                    &state.dir_window_cas);
+                        state.preview_start_line = 0;
+
+                        // If there's only one file in the directory, auto-select it
+                        if (state.dir_window_cas.num_files == 1) {
+                            state.selected_entry = FileAttr_get_name(state.files.el[0]);
+                        }
+                        werase(notifwin);
+                        show_notification(notifwin, "Entered directory: %s", state.selected_entry);
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    } else {
+                        werase(notifwin);
+                        show_notification(notifwin, "Selected entry is not a directory");
+                        wrefresh(notifwin);
+                        should_clear_notif = false;
+                    }
+                }
+            }
+
+            // 5) TAB (switch active window)
+            else if (ch == kb.key_tab) {
+                active_window = (active_window == DIRECTORY_WIN_ACTIVE)
+                                ? PREVIEW_WIN_ACTIVE
+                                : DIRECTORY_WIN_ACTIVE;
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
+                    state.preview_start_line = 0;
+                }
+                werase(notifwin);
+                show_notification(
+                    notifwin,
+                    "Switched to %s window",
+                    (active_window == DIRECTORY_WIN_ACTIVE) ? "Directory" : "Preview"
+                );
+                wrefresh(notifwin);
+                should_clear_notif = false;
+            }
+
+            // 6) EDIT (Ctrl+E, for example)
+            else if (ch == kb.key_edit) {
+                if (active_window == PREVIEW_WIN_ACTIVE) {
+                    char file_path[MAX_PATH_LENGTH];
+                    path_join(file_path, state.current_directory, state.selected_entry);
+                    edit_file_in_terminal(previewwin, file_path, notifwin, &kb);
+                    state.preview_start_line = 0;
+                    werase(notifwin);
+                    show_notification(notifwin, "Editing file: %s", state.selected_entry);
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
+                }
+            }
+
+            // 7) COPY (Ctrl+C)
+            else if (ch == kb.key_copy) {
+                if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
+                    char full_path[MAX_PATH_LENGTH];
+                    path_join(full_path, state.current_directory, state.selected_entry);
+                    copy_to_clipboard(full_path);
+                    strncpy(copied_filename, state.selected_entry, MAX_PATH_LENGTH);
+                    werase(notifwin);
+                    show_notification(notifwin, "Copied to clipboard: %s", state.selected_entry);
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
+                }
+            }
+
+            // 8) PASTE (Ctrl+V)
+            else if (ch == kb.key_paste) {
+                if (active_window == DIRECTORY_WIN_ACTIVE && copied_filename[0] != '\0') {
+                    paste_from_clipboard(state.current_directory, copied_filename);
+                    reload_directory(&state.files, state.current_directory);
+                    state.dir_window_cas.num_files = Vector_len(state.files);
+                    werase(notifwin);
+                    show_notification(notifwin, "Pasted file: %s", copied_filename);
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
+                }
+            }
+
+            // 9) CUT (Ctrl+X)
+            else if (ch == kb.key_cut) {
+                if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
+                    char full_path[MAX_PATH_LENGTH];
+                    path_join(full_path, state.current_directory, state.selected_entry);
+                    cut_and_paste(full_path);
+                    strncpy(copied_filename, state.selected_entry, MAX_PATH_LENGTH);
+
+                    // Reload directory to reflect the cut file
+                    reload_directory(&state.files, state.current_directory);
+                    state.dir_window_cas.num_files = Vector_len(state.files);
+
+                    werase(notifwin);
+                    show_notification(notifwin, "Cut to clipboard: %s", state.selected_entry);
+                    wrefresh(notifwin);
+                    should_clear_notif = false;
+                }
+            }
+
+            // 10) DELETE (Ctrl+D)
+            else if (ch == kb.key_delete) {
+                if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
+                    char full_path[MAX_PATH_LENGTH];
+                    path_join(full_path, state.current_directory, state.selected_entry);
+
+                    bool should_delete = false;
+                    confirm_delete(notifwin, state.selected_entry, &should_delete);
+
+                    if (should_delete) {
+                        delete_item(full_path);
+                        reload_directory(&state.files, state.current_directory);
+                        state.dir_window_cas.num_files = Vector_len(state.files);
+
+                        show_notification(notifwin, "Deleted: %s", state.selected_entry);
+                        should_clear_notif = false;
+                    } else {
+                        show_notification(notifwin, "Delete cancelled");
+                        should_clear_notif = false;
+                    }
+                }
+            }
+
+            // 11) RENAME (Ctrl+R)
+            else if (ch == kb.key_rename) {
+                if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
+                    char full_path[MAX_PATH_LENGTH];
+                    path_join(full_path, state.current_directory, state.selected_entry);
+
+                    rename_item(notifwin, full_path);
+
+                    // Reload to show changes
+                    reload_directory(&state.files, state.current_directory);
+                    state.dir_window_cas.num_files = Vector_len(state.files);
+
+                    if (state.dir_window_cas.num_files > 0) {
+                        state.dir_window_cas.cursor = 0;
+                        state.dir_window_cas.start = 0;
+                        state.selected_entry = FileAttr_get_name(state.files.el[0]);
+                    } else {
+                        state.selected_entry = "";
+                    }
+                }
+            }
+
+            // 12) CREATE NEW (Ctrl+N)
+            else if (ch == kb.key_new) {
+                if (active_window == DIRECTORY_WIN_ACTIVE) {
+                    create_new_file(notifwin, state.current_directory);
+                    reload_directory(&state.files, state.current_directory);
+                    state.dir_window_cas.num_files = Vector_len(state.files);
+
+                    if (state.dir_window_cas.num_files > 0) {
+                        state.dir_window_cas.cursor = 0;
+                        state.dir_window_cas.start = 0;
+                        state.selected_entry = FileAttr_get_name(state.files.el[0]);
+                    } else {
+                        state.selected_entry = "";
+                    }
+                }
+            }
+
         }
 
         // Clear notification window only if no new notification was displayed
@@ -1284,10 +1389,7 @@ int main() {
     delwin(notifwin);
     delwin(mainwin);
     endwin();
-
-    // Add the cleanup call before exit
     cleanup_temp_files();
 
     return 0;
 }
-

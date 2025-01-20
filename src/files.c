@@ -16,13 +16,14 @@
 #include <limits.h>                // For PATH_MAX
 #include <fcntl.h>                 // For O_RDONLY
 #include <magic.h>                 // For libmagic
-#include "globals.h"
+#include <time.h>
+
 // Local includes
 #include "main.h"                  // for FileAttr, Vector, Vector_add, Vector_len, Vector_set_len
 #include "utils.h"                 // for path_join, is_directory
 #include "files.h"                 // for FileAttributes, FileAttr, MAX_PATH_LENGTH
 #include "globals.h"
-#include <time.h>
+#include "config.h"
 #define MIN_INT_SIZE_T(x, y) (((size_t)(x) > (y)) ? (y) : (x))
 #define FILES_BANNER_UPDATE_INTERVAL 50000 // 50ms in microseconds
 
@@ -407,8 +408,13 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int *start_line, int
  * @param file_path the path to the file to edit
  * @param notification_window the window to display notifications
  */
-void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notification_window) {
+void edit_file_in_terminal(WINDOW *window, 
+                           const char *file_path, 
+                           WINDOW *notification_window, 
+                           KeyBindings *kb)
+{
     is_editing = 1;
+
     // Open the file for reading and writing
     int fd = open(file_path, O_RDWR);
     if (fd == -1) {
@@ -420,7 +426,7 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
     }
 
     FILE *file = fdopen(fd, "r+");
-    if (file == NULL) {
+    if (!file) {
         pthread_mutex_lock(&banner_mutex);
         mvwprintw(notification_window, 1, 2, "Unable to open file stream");
         wrefresh(notification_window);
@@ -435,28 +441,27 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
     box(window, 0, 0);
     pthread_mutex_unlock(&banner_mutex);
 
-    int ch;
     TextBuffer text_buffer;
-    init_text_buffer(&text_buffer);
+    text_buffer.capacity = 100; 
+    text_buffer.num_lines = 0;
+    text_buffer.lines = malloc(sizeof(char*) * text_buffer.capacity);
 
-    char line[256];
+    // Read the file into our text buffer
     bool is_empty = true;
-
-    // Read the file content into the text buffer
+    char line[256];
     while (fgets(line, sizeof(line), file)) {
         is_empty = false;
         line[strcspn(line, "\n")] = '\0';
-
         // Replace tabs with spaces
         for (char *p = line; *p; p++) {
             if (*p == '\t') {
                 *p = ' ';
             }
         }
-
         if (text_buffer.num_lines >= text_buffer.capacity) {
             text_buffer.capacity *= 2;
-            text_buffer.lines = realloc(text_buffer.lines, sizeof(char*) * text_buffer.capacity);
+            text_buffer.lines = realloc(text_buffer.lines, 
+                            sizeof(char*) * text_buffer.capacity);
             if (!text_buffer.lines) {
                 mvwprintw(notification_window, 1, 2, "Memory allocation error");
                 wrefresh(notification_window);
@@ -464,212 +469,205 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
                 return;
             }
         }
-
         text_buffer.lines[text_buffer.num_lines++] = strdup(line);
     }
-
     if (is_empty) {
+        // If file is empty, start with one blank line
         text_buffer.lines[text_buffer.num_lines++] = strdup("");
     }
 
-    // Initialize scrolling variables
+    // Cursor and scrolling state
     int cursor_line = 0;
-    int cursor_col = 0;
-    int start_line = 0;
+    int cursor_col  = 0;
+    int start_line  = 0;
 
-    // Initial rendering
-    render_text_buffer(window, &text_buffer, &start_line, cursor_line, cursor_col);
-
-    // Enable cursor and allow editing
-    curs_set(1);
+    curs_set(1);        // Show cursor
     keypad(window, TRUE);
+    wtimeout(window, 10);  // Non-blocking input
 
     bool exit_edit_mode = false;
 
-    // Set window timeout for non-blocking input
-    wtimeout(window, 10);  // Short timeout for responsive input
-
     while (!exit_edit_mode) {
-        ch = wgetch(window);
-
+        int ch = wgetch(window);
         if (ch == ERR) {
-            // Check for window resize
-            if (resized) {
-                resized = 0;
-                // Lock mutex to prevent concurrent updates
-                pthread_mutex_lock(&banner_mutex);
-
-                // Get new window dimensions
-                int new_y, new_x;
-                getmaxyx(window, new_y, new_x);
-
-                // Resize the window
-                wresize(window, new_y, new_x);
-
-                // Redraw the window contents
-                render_text_buffer(window, &text_buffer, &start_line, cursor_line, cursor_col);
-
-                // Update other dependent windows if necessary
-                // For example, redraw the directory and preview windows
-                // You might need to pass additional references or use global variables
-
-                // Refresh the window after resizing
-                wrefresh(window);
-
-  
-
-                pthread_mutex_unlock(&banner_mutex);
-            }
             napms(10);
             continue;
-        }   
+        }
+
         is_editing = 0;
-        if (ch == KEY_F(1)) break;
 
-
-
-
-        switch (ch) {
-            case KEY_UP:
-                if (cursor_line > 0) {
-                    cursor_line--;
-                    cursor_col = MIN(cursor_col, (int)strlen(text_buffer.lines[cursor_line]));
+        // 1) Quit editing
+        if (ch == kb->edit_quit) {
+            break;
+        }
+        // 2) Save file
+        else if (ch == kb->edit_save) {
+            fclose(file);
+            file = fopen(file_path, "w");
+            if (!file) {
+                mvwprintw(notification_window, 0, 0, "Error opening file for writing");
+                wrefresh(notification_window);
+                continue;
+            }
+            // Write lines
+            for (int i = 0; i < text_buffer.num_lines; i++) {
+                if (fprintf(file, "%s\n", text_buffer.lines[i]) < 0) {
+                    mvwprintw(notification_window, 0, 0, "Error writing to file");
+                    wrefresh(notification_window);
+                    break;
                 }
-                break;
-            case KEY_DOWN:
-                if (cursor_line < text_buffer.num_lines - 1) {
-                    cursor_line++;
-                    cursor_col = MIN(cursor_col, (int)strlen(text_buffer.lines[cursor_line]));
-                }
-                break;
-            case KEY_LEFT:
-                if (cursor_col > 0) {
-                    cursor_col--;
-                } else if (cursor_line > 0) {
-                    cursor_line--;
-                    cursor_col = (int)strlen(text_buffer.lines[cursor_line]);
-                }
-                break;
-            case KEY_RIGHT:
-                if (cursor_col < (int)strlen(text_buffer.lines[cursor_line])) {
-                    cursor_col++;
-                } else if (cursor_line < text_buffer.num_lines - 1) {
-                    cursor_line++;
-                    cursor_col = 0;
-                }
-                break;
-            case '\n': {
-                char *current_line = text_buffer.lines[cursor_line];
-                char *new_line = strdup(current_line + cursor_col);
-                current_line[cursor_col] = '\0';
+            }
+            fflush(file);
+            fclose(file);
 
-                if (text_buffer.num_lines >= text_buffer.capacity) {
-                    text_buffer.capacity *= 2;
-                    text_buffer.lines = realloc(text_buffer.lines, sizeof(char*) * text_buffer.capacity);
-                    if (!text_buffer.lines) {
-                        mvwprintw(notification_window, 1, 2, "Memory allocation error");
-                        wrefresh(notification_window);
-                        fclose(file);
-                        return;
-                    }
-                }
+            // Reopen in read+write (optional, if you want to keep editing)
+            file = fopen(file_path, "r+");
+            if (!file) {
+                mvwprintw(notification_window, 0, 0, "Error reopening file for read+write");
+                wrefresh(notification_window);
+            }
 
-                for (int i = text_buffer.num_lines; i > cursor_line + 1; i--) {
-                    text_buffer.lines[i] = text_buffer.lines[i - 1];
-                }
-                text_buffer.lines[cursor_line + 1] = new_line;
-                text_buffer.num_lines++;
+            werase(notification_window);
+            mvwprintw(notification_window, 0, 0, "File saved (Ctrl+S): %s", file_path);
+            wrefresh(notification_window);
+        }
 
+        // 3) Move up
+        else if (ch == kb->edit_up) {
+            if (cursor_line > 0) {
+                cursor_line--;
+                if (cursor_col > (int)strlen(text_buffer.lines[cursor_line])) {
+                    cursor_col = strlen(text_buffer.lines[cursor_line]);
+                }
+            }
+        }
+        // 4) Move down
+        else if (ch == kb->edit_down) {
+            if (cursor_line < text_buffer.num_lines - 1) {
+                cursor_line++;
+                if (cursor_col > (int)strlen(text_buffer.lines[cursor_line])) {
+                    cursor_col = strlen(text_buffer.lines[cursor_line]);
+                }
+            }
+        }
+        // 5) Move left
+        else if (ch == kb->edit_left) {
+            if (cursor_col > 0) {
+                cursor_col--;
+            } else if (cursor_line > 0) {
+                // Move up a line if user is at col=0
+                cursor_line--;
+                cursor_col = strlen(text_buffer.lines[cursor_line]);
+            }
+        }
+        // 6) Move right
+        else if (ch == kb->edit_right) {
+            int line_len = (int)strlen(text_buffer.lines[cursor_line]);
+            if (cursor_col < line_len) {
+                cursor_col++;
+            } else if (cursor_line < text_buffer.num_lines - 1) {
+                // Move down a line if user is at end
                 cursor_line++;
                 cursor_col = 0;
             }
-                break;
-            case KEY_BACKSPACE:
-            case 127:
-                if (cursor_col > 0) {
-                    char *current_line = text_buffer.lines[cursor_line];
-                    memmove(&current_line[cursor_col - 1], &current_line[cursor_col], strlen(current_line) - cursor_col + 1);
-                    cursor_col--;
-                } else if (cursor_line > 0) {
-                    int prev_len = (int)strlen(text_buffer.lines[cursor_line - 1]);
-                    int curr_len = (int)strlen(text_buffer.lines[cursor_line]);
+        }
+        // 7) Enter / new line
+        else if (ch == '\n') {
+            char *current_line = text_buffer.lines[cursor_line];
+            //int line_len = (int)strlen(current_line);
 
-                    text_buffer.lines[cursor_line - 1] = realloc(text_buffer.lines[cursor_line - 1], prev_len + curr_len + 1);
-                    strcat(text_buffer.lines[cursor_line - 1], text_buffer.lines[cursor_line]);
-                    free(text_buffer.lines[cursor_line]);
+            // Split the line at cursor_col
+            char *new_line = strdup(current_line + cursor_col);
+            current_line[cursor_col] = '\0';
 
-                    for (int i = cursor_line; i < text_buffer.num_lines - 1; i++) {
-                        text_buffer.lines[i] = text_buffer.lines[i + 1];
-                    }
-                    text_buffer.num_lines--;
-
-                    cursor_line--;
-                    cursor_col = prev_len;
-                }
-                break;
-            case 7:  // Ctrl+G
-                fclose(file);
-                file = fopen(file_path, "w");
-                if (file == NULL) {
-                    mvwprintw(notification_window, LINES - 2, 2, "Error opening file for writing");
+            // Realloc if needed
+            if (text_buffer.num_lines >= text_buffer.capacity) {
+                text_buffer.capacity *= 2;
+                text_buffer.lines = realloc(text_buffer.lines, 
+                                  sizeof(char*) * text_buffer.capacity);
+                if (!text_buffer.lines) {
+                    mvwprintw(notification_window, 1, 2, "Memory allocation error");
                     wrefresh(notification_window);
-                    break;
+                    fclose(file);
+                    return;
                 }
+            }
 
-                for (int i = 0; i < text_buffer.num_lines; i++) {
-                    if (fprintf(file, "%s\n", text_buffer.lines[i]) < 0) {
-                        mvwprintw(notification_window, LINES - 2, 2, "Error writing to file");
-                        wrefresh(notification_window);
-                        break;
-                    }
-                }
+            // Shift lines down
+            for (int i = text_buffer.num_lines; i > cursor_line + 1; i--) {
+                text_buffer.lines[i] = text_buffer.lines[i - 1];
+            }
+            text_buffer.lines[cursor_line + 1] = new_line;
+            text_buffer.num_lines++;
 
-                fflush(file);
-                fclose(file);
-                file = fopen(file_path, "r+");
-                if (file == NULL) {
-                    mvwprintw(notification_window, LINES - 2, 2, "Error reopening file");
-                    wrefresh(notification_window);
-                    break;
-                }
+            // Move cursor to new line
+            cursor_line++;
+            cursor_col = 0;
+        }
+        // 8) Backspace
+        else if (ch == kb->edit_backspace) {
+            if (cursor_col > 0) {
+                char *current_line = text_buffer.lines[cursor_line];
+                memmove(&current_line[cursor_col - 1],
+                        &current_line[cursor_col],
+                        strlen(current_line) - cursor_col + 1);
+                cursor_col--;
+            }
+            else if (cursor_line > 0) {
+                // Merge current line with previous line
+                int prev_len = strlen(text_buffer.lines[cursor_line - 1]);
+                int curr_len = strlen(text_buffer.lines[cursor_line]);
 
-                werase(notification_window);
-                mvwprintw(notification_window, 0, 0, "File saved: %s", file_path);
-                wrefresh(notification_window);
-                break;
-            case 5:   // Ctrl+E
-                exit_edit_mode = true;
-                break;
-            default:
-                if (ch >= 32 && ch <= 126) {
-                    char *current_line = text_buffer.lines[cursor_line];
-                    int line_len = (int)strlen(current_line);
-                    current_line = realloc(current_line, line_len + 2);
-                    memmove(&current_line[cursor_col + 1], &current_line[cursor_col], line_len - cursor_col + 1);
-                    current_line[cursor_col] = ch;
-                    text_buffer.lines[cursor_line] = current_line;
-                    cursor_col++;
+                text_buffer.lines[cursor_line - 1] = realloc(
+                    text_buffer.lines[cursor_line - 1], prev_len + curr_len + 1
+                );
+                strcat(text_buffer.lines[cursor_line - 1], text_buffer.lines[cursor_line]);
+                free(text_buffer.lines[cursor_line]);
+
+                // Shift lines up
+                for (int i = cursor_line; i < text_buffer.num_lines - 1; i++) {
+                    text_buffer.lines[i] = text_buffer.lines[i + 1];
                 }
-                break;
+                text_buffer.num_lines--;
+
+                cursor_line--;
+                cursor_col = prev_len;
+            }
+        }
+        // 9) Possibly an extra “exit edit” keystroke
+        else if (ch == kb->edit_quit) {
+            exit_edit_mode = true;
+        }
+        // 10) Printable characters
+        else if (ch >= 32 && ch <= 126) {
+            char *curr_line = text_buffer.lines[cursor_line];
+            int line_len = (int)strlen(curr_line);
+
+            // Expand current line by 1 char
+            curr_line = realloc(curr_line, line_len + 2);
+            memmove(&curr_line[cursor_col + 1],
+                    &curr_line[cursor_col],
+                    line_len - cursor_col + 1);
+            curr_line[cursor_col] = (char)ch;
+            text_buffer.lines[cursor_line] = curr_line;
+            cursor_col++;
         }
 
-        // Render the updated buffer
+        // Re-render after any key
         render_text_buffer(window, &text_buffer, &start_line, cursor_line, cursor_col);
-
     }
 
+    // Cleanup
     fclose(file);
     curs_set(0);
-
-    // Restore window timeout to blocking mode
     wtimeout(window, -1);
 
-    // Clean up text buffer
     for (int i = 0; i < text_buffer.num_lines; i++) {
         free(text_buffer.lines[i]);
     }
     free(text_buffer.lines);
 }
+
 
 /**
  * Checks if the given file has a supported MIME type.
