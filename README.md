@@ -69,7 +69,120 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 - File information display (size, permissions, modification time)
 - Scrollable preview window
 - Tab-based window switching between directory and preview panes
+- Configure keybinds
 
+## Configuration
+
+### Default Keybindings
+
+cupidfm comes with a set of **default keybindings**. On **first run**, if CupidFM cannot find a user configuration file, it will **auto-generate** one at:
+
+```
+~/.cupidfmrc
+```
+
+Below is a screenshot showing the start up
+
+![preview](img/startup.png)
+
+This auto-generated config file includes default bindings, for example:
+
+```
+key_up=KEY_UP
+key_down=KEY_DOWN
+key_left=KEY_LEFT
+key_right=KEY_RIGHT
+key_tab=Tab
+key_exit=F1
+
+key_edit=^E
+key_copy=^C
+key_paste=^V
+key_cut=^X
+key_delete=^D
+key_rename=^R
+key_new=^N
+
+edit_up=KEY_UP
+edit_down=KEY_DOWN
+edit_left=KEY_LEFT
+edit_right=KEY_RIGHT
+edit_save=^G
+edit_quit=^Q
+edit_backspace=KEY_BACKSPACE
+```
+
+**Immediately after creating** `~/.cupidfmrc` for the first time, CupidFM will display a **popup** in the interface letting you know where it wrote your new config.
+
+### Editing the Config File
+
+After CupidFM creates this file, you are free to **edit** it to customize keybindings or add new mappings. Here are some rules/notes:
+
+1. **Valid Formats**
+
+   - You may use special ncurses names like `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, etc.
+   - You can assign **Ctrl**+**key** by using a caret, e.g. `^C`.
+   - Single characters (`a`, `b`, `x`) are also valid.
+
+2. **Commenting and Whitespace**
+
+   - Lines beginning with `#` are treated as comments and ignored.
+   - Blank or whitespace-only lines are also ignored.
+
+3. **Sample**
+
+   If you only want to change the exit key from **F1** to **Esc**, you might do:
+   ```text
+   key_exit=27
+   ```
+   since **ASCII 27** is **Esc** in decimal form.
+
+4. **Restart Required**
+
+   - Changes to `~/.cupidfmrc` take effect **next time** you launch CupidFM.
+
+### Where CupidFM Searches for the Config
+
+1. **`~/.cupidfmrc`**  
+   By default, CupidFM looks for this file in your home directory.
+
+2. **No config found?**  
+   - CupidFM loads **hard-coded defaults** (arrow keys, F1, etc.) 
+   - Automatically **writes** a new file to `~/.cupidfmrc`, which you can later edit.
+
+### Common Changes to the Config
+
+- **Changing the Exit Key**  
+  ```text
+  key_exit=F10
+  ```
+  or
+  ```text
+  key_exit=27  # 27 = ESC
+  ```
+- **Using Emacs-like Keys**  
+  If you prefer `Ctrl+P` for up and `Ctrl+N` for down:
+  ```text
+  key_up=^P
+  key_down=^N
+  ```
+- **Remapping Left/Right**  
+  ```text
+  key_left=KEY_BACKSPACE
+  key_right=KEY_ENTER
+  ```
+
+### Troubleshooting
+
+- **Config Not Created**:  
+  Make sure you have a valid `$HOME` environment variable set. If `$HOME` is missing or empty, CupidFM will try to create the config in the current directory instead.
+- **Invalid or Unknown Key**:  
+  If you enter an invalid key name, it will be ignored and remain at default. Check the logs or run from a terminal to see error messages.
+- **Changing Keybindings**:
+  - If something stops working after changes, revert the line or remove it to fall back to the default.
+  - You can always delete `~/.cupidfmrc` and relaunch to regenerate a fresh config.
+
+With these steps, you can **fully customize** your keybindings in `~/.cupidfmrc`. If you ever lose or remove it, CupidFM will rewrite the default file and let you know on the next run!
 ## Todo
 
 ### High Priority
@@ -105,8 +218,8 @@ Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are kno
 - [ ] Implement file search functionality
 - [ ] Add file filtering options
 - [ ] Implement file/directory permissions editing
-- [ ] Add configuration file support for customizing:
-  - [ ] Key bindings
+- [X] Add configuration file support for customizing:
+  - [X] Key bindings
   - [ ] Color schemes
   - [ ] Default text editor
   - [ ] File associations
