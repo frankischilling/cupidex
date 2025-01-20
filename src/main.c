@@ -38,7 +38,7 @@
 #define NOTIFICATION_TIMEOUT_MS 250    // 250ms timeout for notifications
 
 // Global variable definitions
-const char *BANNER_TEXT = "Welcome to CupidFM - Press F1 to exit";
+const char *BANNER_TEXT = NULL;  // To be initialized in main()
 const char *BUILD_INFO = "Version 1.0";
 WINDOW *bannerwin = NULL;
 WINDOW *notifwin = NULL;
@@ -79,6 +79,45 @@ typedef struct {
 void fix_cursor(CursorAndSlice *cas);
 
 // Function Implementations
+static const char* keycode_to_string(int keycode) {
+    static char buf[32];
+
+    // Define the base value for function keys
+    // Typically, KEY_F(1) is 265, so base = 264
+    const int FUNCTION_KEY_BASE = KEY_F(1) - 1;
+
+    // Handle function keys
+    if (keycode >= KEY_F(1) && keycode <= KEY_F(63)) {
+        int func_num = keycode - FUNCTION_KEY_BASE;
+        snprintf(buf, sizeof(buf), "F%d", func_num);
+        return buf;
+    }
+
+    // Handle control characters (Ctrl+A to Ctrl+Z)
+    if (keycode >= 1 && keycode <= 26) { // Ctrl+A (1) to Ctrl+Z (26)
+        char c = 'A' + (keycode - 1);
+        snprintf(buf, sizeof(buf), "^%c", c);
+        return buf;
+    }
+
+    // Handle special keys
+    switch (keycode) {
+        case KEY_UP: return "KEY_UP";
+        case KEY_DOWN: return "KEY_DOWN";
+        case KEY_LEFT: return "KEY_LEFT";
+        case KEY_RIGHT: return "KEY_RIGHT";
+        case '\t': return "Tab";
+        case KEY_BACKSPACE: return "Backspace";
+        // Add more special keys as needed
+        default:
+            // Handle printable characters
+            if (keycode >= 32 && keycode <= 126) { // Printable ASCII
+                snprintf(buf, sizeof(buf), "%c", keycode);
+                return buf;
+            }
+            return "UNKNOWN";
+    }
+}
 
 void show_notification(WINDOW *win, const char *format, ...) {
     va_list args;
@@ -769,8 +808,8 @@ void draw_scrolling_banner(WINDOW *window, const char *text, const char *build_i
     // Only update banner if enough time has passed
     long time_diff = (current_time.tv_sec - last_scroll_time.tv_sec) * 1000000 +
                     (current_time.tv_nsec - last_scroll_time.tv_nsec) / 1000;
-    
-    if (time_diff < BANNER_UPDATE_INTERVAL) {
+        
+    if (time_diff < BANNER_SCROLL_INTERVAL) {
         return;  // Skip update if not enough time has passed
     }
     
@@ -964,7 +1003,7 @@ int main() {
 
     // Initialize an error buffer to capture error messages
     char error_buffer[ERROR_BUFFER_SIZE] = {0};
-    
+
     // Load the user configuration, capturing any errors
     int config_errors = load_config_file(&kb, config_path, error_buffer, sizeof(error_buffer));
 
@@ -1028,6 +1067,13 @@ int main() {
         // Optionally, you can decide whether to proceed with defaults or halt execution
         // For now, we'll proceed with whatever was loaded and keep defaults for invalid entries
     }
+
+    // Now that keybindings are loaded from config, initialize the banner
+    char banner_text_buffer[256];
+    snprintf(banner_text_buffer, sizeof(banner_text_buffer), "Welcome to CupidFM - Press %s to exit", keycode_to_string(kb.key_exit));
+
+    // Assign to global BANNER_TEXT
+    BANNER_TEXT = banner_text_buffer;
 
     // Initialize application state
     AppState state;

@@ -528,7 +528,7 @@ void edit_file_in_terminal(WINDOW *window,
             }
 
             werase(notification_window);
-            mvwprintw(notification_window, 0, 0, "File saved (Ctrl+S): %s", file_path);
+            mvwprintw(notification_window, 0, 0, "File saved: %s", file_path);
             wrefresh(notification_window);
         }
 
