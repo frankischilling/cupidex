@@ -194,6 +194,7 @@ With these steps, you can **fully customize** your keybindings in `~/.cupidfmrc`
 
 ### Edit Mode Issues
 - [ ] Banner marquee not rotating correctly when rotating in edit mode
+- [ ] Fix banner not rotating when prompted eg. (new file or dir)
 - [ ] Fix sig winch handling breaking while in edit mode
 - [ ] Fix cursor showing up at the bottom of the text editing buffer
 - [ ] Fix text buffer not scrolling to the right when typing and hitting the border of the window
