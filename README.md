@@ -343,7 +343,7 @@ The **Command Line Interface (CLI)** for **cupidfm** will introduce a powerful w
 - [X] **Create New File (Ctrl+N)**  
   - Create a new, empty file in the current directory.
 
-- [ ] **Create New Directory (Ctrl+Shift+N)**  
+- [ ] **Create New Directory (Shift+N)**  
   - Create a new directory in the current directory.
 
 - [ ] **Select All (Ctrl+A)**  
