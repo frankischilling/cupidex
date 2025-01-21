@@ -21,6 +21,7 @@ typedef struct {
     int key_rename;  // e.g., Ctrl+R
     int key_new;     // e.g., Ctrl+N
     int key_save;    // e.g., Ctrl+S
+    int key_new_dir; // e.g., Shift+N
 
     // Dedicated editing keys
     int edit_up;

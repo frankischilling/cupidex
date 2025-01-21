@@ -718,4 +718,3 @@ bool is_supported_file_type(const char *filename) {
     magic_close(magic_cookie);
     return supported;
 }
-

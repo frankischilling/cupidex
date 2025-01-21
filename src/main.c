@@ -19,6 +19,7 @@
 #include <termios.h>   // For resize_term
 #include <pthread.h>   // For threading
 #include <locale.h>    // For setlocale
+#include <errno.h>     // For errno
 
 // Local includes
 #include "utils.h"
@@ -36,7 +37,7 @@
 #define INPUT_CHECK_INTERVAL 10        // Milliseconds for input checking (10ms)
 #define ERROR_BUFFER_SIZE 2048         // Increased buffer size for error messages
 #define NOTIFICATION_TIMEOUT_MS 250    // 250ms timeout for notifications
-
+#define MAX_DIR_NAME 256
 // Global variable definitions
 const char *BANNER_TEXT = NULL;  // To be initialized in main()
 const char *BUILD_INFO = "Version 1.0";
@@ -919,6 +920,47 @@ static void show_popup(const char *title, const char *fmt, ...) {
     delwin(popup);
 }
 
+/**
+ * Function to create a new directory with user input
+ *
+ * @param current_directory The current directory where the new folder will be created
+ * @param notification_window The ncurses window for displaying messages and user input
+ */
+void create_new_directory(const char *current_directory, WINDOW *notification_window) {
+    char dir_name[MAX_DIR_NAME] = {0};
+
+    // Prompt user in the notification area
+    show_notification(notification_window, "Enter new directory name: ");
+
+    // Enable user input in notification area
+    echo();
+    wgetnstr(notification_window, dir_name, MAX_DIR_NAME - 1);
+    noecho();
+
+    // Trim leading/trailing whitespace
+    char *start = dir_name;
+    while (*start == ' ') start++;  // Skip leading spaces
+    char *end = start + strlen(start) - 1;
+    while (end > start && *end == ' ') *end-- = '\0'; // Trim trailing spaces
+
+    // Check if input is empty
+    if (strlen(start) == 0) {
+        show_notification(notification_window, "❌ Directory name cannot be empty.");
+        return;
+    }
+
+    // Construct the full path
+    char full_path[MAX_PATH_LENGTH];
+    snprintf(full_path, sizeof(full_path), "%s/%s", current_directory, start);
+
+    // Attempt to create the directory
+    if (mkdir(full_path, 0755) == 0) {
+        show_notification(notification_window, "✅ Created directory: %s", start);
+    } else {
+        show_notification(notification_window, "❌ Error: %s", strerror(errno));
+    }
+}
+
 /** Function to handle cleanup and exit
  *
  * @param r the exit code
@@ -1034,7 +1076,7 @@ int main() {
             fprintf(fp, "key_rename=^R  # Rename file\n");
             fprintf(fp, "key_new=^N  # Create new file\n");
             fprintf(fp, "key_save=^S  # Save changes\n\n");
-
+            fprintf(fp, "key_new_dir=Shift+N  # Create new directory\n");
             // Editing Mode Keys
             fprintf(fp, "edit_up=KEY_UP\n");
             fprintf(fp, "edit_down=KEY_DOWN\n");
@@ -1386,6 +1428,14 @@ int main() {
                 }
             }
 
+            // 13 CREATE NEW DIR
+            else if (ch == kb.key_new_dir) {
+                // implement
+                create_new_directory(state.current_directory, notifwin);
+                reload_directory(&state.files, state.current_directory);
+                state.dir_window_cas.num_files = Vector_len(state.files);
+
+            }
         }
 
         // Clear notification window only if no new notification was displayed

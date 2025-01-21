@@ -617,124 +617,87 @@ void confirm_delete(WINDOW *notifwin, const char *path, bool *should_delete) {
  * @param notifwin    The ncurses window to display prompts and notifications.
  * @param old_path    The full path to the existing file or directory.
  */
-void rename_item(WINDOW *notifwin, const char *old_path)
-{
-    // We'll extract the parent directory from old_path, 
-    // then ask for the new filename (not the full path).
-    // Finally, we join them together and call rename().
-    
-    // 1. Extract the directory portion from old_path
-    //    (if old_path is "/some/path/file.txt",
-    //     dirname_part will be "/some/path",
-    //     basename_part will be "file.txt").
-    char temp_path[MAX_PATH_LENGTH];
-    strncpy(temp_path, old_path, sizeof(temp_path));
-    temp_path[sizeof(temp_path) - 1] = '\0';
-    char *dir_part  = dirname(temp_path);  // modifies temp_path internally
-
-    // We need a copy for the basename because dirname() and basename() 
-    // can interfere with each other if using the same buffer.
-    char temp_path2[MAX_PATH_LENGTH];
-    strncpy(temp_path2, old_path, sizeof(temp_path2));
-    temp_path2[sizeof(temp_path2) - 1] = '\0';
-    char *base_part = basename(temp_path2);
-
-    // 2. Prompt user for the new name
-    werase(notifwin);
-    mvwprintw(notifwin, 0, 0, "Rename '%s' to: ", base_part);
-    wclrtoeol(notifwin); // clear to end of line
-    wrefresh(notifwin);
-
-    // We will temporarily enable echo just for user input
-    echo();
-    curs_set(1);
-
+void rename_item(WINDOW *win, const char *old_path) {
     char new_name[MAX_PATH_LENGTH];
-    memset(new_name, 0, sizeof(new_name));
+    int ch, index = 0;
 
-    // Collect the user input on notifwin
-    wgetnstr(notifwin, new_name, sizeof(new_name) - 1);
+    werase(win);
+    mvwprintw(win, 0, 0, "Rename (Esc to cancel): ");
+    wrefresh(win);
 
-    // Restore noecho, hide cursor
-    noecho();
-    curs_set(0);
+    while ((ch = wgetch(win)) != '\n') {
+        if (ch == 27) { // Escape key pressed
+            return;
+        }
+        if (ch == KEY_BACKSPACE || ch == 127) {
+            if (index > 0) {
+                index--;
+                new_name[index] = '\0';
+            }
+        } else if (isprint(ch) && index < MAX_PATH_LENGTH - 1) {
+            new_name[index++] = ch;
+            new_name[index] = '\0';
+        }
+        werase(win);
+        mvwprintw(win, 0, 0, "Rename (Esc to cancel): %s", new_name);
+        wrefresh(win);
+    }
 
-    // If user presses ESC or empty name, we can handle that here
-    if (strlen(new_name) == 0) {
-        werase(notifwin);
-        mvwprintw(notifwin, 0, 0, "Rename cancelled.");
-        wrefresh(notifwin);
+    if (index == 0) {
+        mvwprintw(win, 0, 0, "Invalid name, rename cancelled");
         return;
     }
 
-    // 3. Construct the new full path
-    char new_full_path[MAX_PATH_LENGTH];
-    path_join(new_full_path, dir_part, new_name);
+    char new_path[MAX_PATH_LENGTH * 2];
+    snprintf(new_path, sizeof(new_path), "%s/%s", dirname(strdup(old_path)), new_name);
 
-    // 4. Perform the rename
-    if (rename(old_path, new_full_path) == 0) {
-        // success
-        werase(notifwin);
-        mvwprintw(notifwin, 0, 0, "Renamed '%s' -> '%s'", base_part, new_name);
-        wrefresh(notifwin);
+    if (rename(old_path, new_path) == 0) {
+        mvwprintw(win, 0, 0, "Renamed to: %s", new_name);
     } else {
-        // error
-        werase(notifwin);
-        mvwprintw(notifwin, 0, 0, "Error renaming '%s': %s", base_part, strerror(errno));
-        wrefresh(notifwin);
+        mvwprintw(win, 0, 0, "Rename failed: %s", strerror(errno));
     }
 }
 
-/**
- * Create a new file in the current directory by prompting the user for a filename.
- *
- * @param notifwin        The ncurses window used to prompt/notify.
- * @param current_dir     The current directory path (e.g. "/home/user/...").
- */
-void create_new_file(WINDOW *notifwin, const char *current_dir)
-{
-    // Prompt user for the new file name in notifwin
-    werase(notifwin);
-    mvwprintw(notifwin, 0, 0, "Enter new file name: ");
-    wclrtoeol(notifwin);
-    wrefresh(notifwin);
+void create_new_file(WINDOW *win, const char *dir_path) {
+    char file_name[MAX_PATH_LENGTH];
+    int ch, index = 0;
 
-    // Temporarily enable echo + show cursor while user types
-    echo();
-    curs_set(1);
+    werase(win);
+    mvwprintw(win, 0, 0, "New file name (Esc to cancel): ");
+    wrefresh(win);
 
-    char new_name[MAX_PATH_LENGTH];
-    memset(new_name, 0, sizeof(new_name));
-    wgetnstr(notifwin, new_name, sizeof(new_name) - 1);
+    while ((ch = wgetch(win)) != '\n') {
+        if (ch == 27) { // Escape key pressed
+            return;
+        }
+        if (ch == KEY_BACKSPACE || ch == 127) {
+            if (index > 0) {
+                index--;
+                file_name[index] = '\0';
+            }
+        } else if (isprint(ch) && index < MAX_PATH_LENGTH - 1) {
+            file_name[index++] = ch;
+            file_name[index] = '\0';
+        }
+        werase(win);
+        mvwprintw(win, 0, 0, "New file name (Esc to cancel): %s", file_name);
+        wrefresh(win);
+    }
 
-    // Restore noecho + hide cursor
-    noecho();
-    curs_set(0);
-
-    if (strlen(new_name) == 0) {
-        // If user cancelled or typed an empty string
-        werase(notifwin);
-        mvwprintw(notifwin, 0, 0, "File creation cancelled.");
-        wrefresh(notifwin);
+    if (index == 0) {
+        mvwprintw(win, 0, 0, "Invalid name, file creation cancelled");
         return;
     }
 
-    // Join current_dir and new_name
-    char full_path[MAX_PATH_LENGTH];
-    path_join(full_path, current_dir, new_name);
+    char full_path[MAX_PATH_LENGTH * 2];
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, file_name);
 
-    // Attempt to create the file
-    FILE *f = fopen(full_path, "w");
-    if (!f) {
-        werase(notifwin);
-        mvwprintw(notifwin, 0, 0, "Error creating file '%s': %s", new_name, strerror(errno));
-        wrefresh(notifwin);
-        return;
+    FILE *file = fopen(full_path, "w");
+    if (file) {
+        fclose(file);
+        mvwprintw(win, 0, 0, "File created: %s", file_name);
+    } else {
+        mvwprintw(win, 0, 0, "File creation failed: %s", strerror(errno));
     }
-    fclose(f);
-
-    // Notify success
-    werase(notifwin);
-    mvwprintw(notifwin, 0, 0, "Created file: %s", new_name);
-    wrefresh(notifwin);
 }
+
