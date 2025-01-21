@@ -226,7 +226,8 @@ With these steps, you can **fully customize** your keybindings in `~/.cupidfmrc`
   - [ ] Change default text preview files
 - [ ] Add image preview
 - [ ] Basic file dialog for web and other applications
-- [ ] Basic install script for building, installing nerd fonts and other dependencies, and then moving the executable to /usr/bin 
+- [ ] Basic install script for building, installing nerd fonts and other dependencies, and then moving the executable to /usr/bin
+- [ ] Better config parsing (use multiple modifers) 
 
 ### Key Features to Implement
 
