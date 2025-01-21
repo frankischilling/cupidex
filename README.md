@@ -373,6 +373,9 @@ The **Command Line Interface (CLI)** for **cupidfm** will introduce a powerful w
 - [ ] **File Filtering (Ctrl+Shift+F)**  
   - Apply filters to display files by type, size, or modification date.
 
+- [ ] **Open command bar (Ctrl+Shift+C)**
+  - Lets users type in command bar
+    
 #### **1. Command Bar Design**
 - [ ] Add a command bar at the bottom of the **cupidfm** interface.
 - [ ] Display typed commands dynamically and update the UI to show results or error messages.
