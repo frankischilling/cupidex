@@ -30,23 +30,6 @@
 #include "globals.h"
 #include "config.h"
 
-#define MAX_DISPLAY_LENGTH 32
-#define TAB 9
-#define CTRL_E 5
-#define BANNER_SCROLL_INTERVAL 250000  // Microseconds between scroll updates (250ms)
-#define INPUT_CHECK_INTERVAL 10        // Milliseconds for input checking (10ms)
-#define ERROR_BUFFER_SIZE 2048         // Increased buffer size for error messages
-#define NOTIFICATION_TIMEOUT_MS 250    // 250ms timeout for notifications
-// Global variable definitions
-const char *BANNER_TEXT = NULL;  // To be initialized in main()
-const char *BUILD_INFO = "Version 1.0";
-WINDOW *bannerwin = NULL;
-WINDOW *notifwin = NULL;
-struct timespec last_scroll_time = {0, 0};
-pthread_mutex_t banner_mutex = PTHREAD_MUTEX_INITIALIZER;
-bool should_clear_notif = true;
-struct timespec last_notification_time = {0, 0};
-
 // Global resize flag
 volatile sig_atomic_t resized = 0;
 volatile sig_atomic_t is_editing = 0;
@@ -580,20 +563,6 @@ void redraw_all_windows(AppState *state) {
     wrefresh(dirwin);
     wrefresh(previewwin);
     wrefresh(notifwin);
-}
-
-/** Function to reload the directory contents
- *
- * @param files the list of files
- * @param current_directory the current directory
- */
-void reload_directory(Vector *files, const char *current_directory) {
-    // Empties the vector
-    Vector_set_len(files, 0);
-    // Reads the filenames
-    append_files_to_vec(files, current_directory);
-    // Makes the vector shorter
-    Vector_sane_cap(files);
 }
 
 /** Function to navigate up in the directory window

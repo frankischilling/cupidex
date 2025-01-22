@@ -50,7 +50,8 @@ bool confirm_delete(const char *path, bool *should_delete) {
     box(popup, 0, 0);
     
     // Display the confirmation message
-    mvwprintw(popup, 2, 2, "Delete '%s'? (y/n): ", path);
+    mvwprintw(popup, 1, 2, "Confirm Delete:");
+    mvwprintw(popup, 2, 2, "'%s' (Y to confirm, N or ESC to cancel)", path);
     wrefresh(popup);
     
     // Capture user input
@@ -60,14 +61,13 @@ bool confirm_delete(const char *path, bool *should_delete) {
         if (ch == 'y') {
             *should_delete = true;
             break;
-        } else if (ch == 'n') {
+        } else if (ch == 'n' || ch == 27) { // 27 = ESC key
             break;
         }
     }
     
     // Clear and delete the popup window
     werase(popup);
-    box(popup, 0, 0);
     wrefresh(popup);
     delwin(popup);
     
@@ -800,4 +800,18 @@ bool create_new_file(WINDOW *win, const char *dir_path) {
         should_clear_notif = false;
         return false;
     }
+}
+
+/** Function to reload the directory contents
+ *
+ * @param files the list of files
+ * @param current_directory the current directory
+ */
+void reload_directory(Vector *files, const char *current_directory) {
+    // Empties the vector
+    Vector_set_len(files, 0);
+    // Reads the filenames
+    append_files_to_vec(files, current_directory);
+    // Makes the vector shorter
+    Vector_sane_cap(files);
 }

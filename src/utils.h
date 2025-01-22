@@ -3,7 +3,8 @@
 
 #include <stdbool.h>
 #include <ncurses.h>
-
+#include "vector.h"
+#include "vecstack.h"
 #define SIZE int
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -19,6 +20,7 @@ void preview_file(const char *filename);
 void change_directory(const char *new_directory, const char ***files, int *num_files, int *selected_entry, int *start_entry, int *end_entry);
 void path_join(char *result, const char *base, const char *extra);
 const char* get_file_emoji(const char *mime_type, const char *filename);
+void reload_directory(Vector *files, const char *current_directory);
 
 // short cut utils
 void copy_to_clipboard(const char *path);
