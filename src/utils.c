@@ -18,19 +18,62 @@
 #include "utils.h"
 #include "files.h"  // Include the header for FileAttr and related functions
 #include "globals.h"
-
+#include "main.h"
 #define MAX_DISPLAY_LENGTH 32
 
 // Declare copied_filename as a global variable at the top of the file
 char copied_filename[MAX_PATH_LENGTH] = "";
+extern bool should_clear_notif; 
 
 /**
- * Function to join two paths together
+ * Confirm deletion of a file or directory by prompting the user.
  *
- * @param result the resulting path
- * @param base the base path
- * @param extra the extra path to append
+ * @param path          The name of the file or directory to delete.
+ * @param should_delete Pointer to a boolean that will be set to true if deletion is confirmed.
+ * @return              true if deletion was confirmed, false otherwise.
  */
+bool confirm_delete(const char *path, bool *should_delete) {
+    *should_delete = false;
+    
+    // Get terminal size
+    int max_y, max_x;
+    getmaxyx(stdscr, max_y, max_x);
+    
+    // Define popup window size
+    int popup_height = 5;
+    int popup_width = 60;
+    int starty = (max_y - popup_height) / 2;
+    int startx = (max_x - popup_width) / 2;
+    
+    // Create the popup window
+    WINDOW *popup = newwin(popup_height, popup_width, starty, startx);
+    box(popup, 0, 0);
+    
+    // Display the confirmation message
+    mvwprintw(popup, 2, 2, "Delete '%s'? (y/n): ", path);
+    wrefresh(popup);
+    
+    // Capture user input
+    int ch;
+    while ((ch = wgetch(popup)) != ERR) {
+        ch = tolower(ch);
+        if (ch == 'y') {
+            *should_delete = true;
+            break;
+        } else if (ch == 'n') {
+            break;
+        }
+    }
+    
+    // Clear and delete the popup window
+    werase(popup);
+    box(popup, 0, 0);
+    wrefresh(popup);
+    delwin(popup);
+    
+    return *should_delete;
+}
+
 void die(int r, const char *format, ...) {
 	fprintf(stderr, "The program used die()\n");
 	fprintf(stderr, "The last errno was %d/%s\n", errno, strerror(errno));
@@ -46,26 +89,14 @@ void die(int r, const char *format, ...) {
 
 	exit(r);
 }
-/**
- * Function to join two paths together
- *
- * @param result the resulting path
- * @param base the base path
- * @param extra the extra path to append
- */
+
 void create_file(const char *filename) {
     FILE *f = fopen(filename, "w");
     if (f == NULL)
         die(1, "Couldn't create file %s", filename);
     fclose(f);
 }
-/**
- * Function to join two paths together
- *
- * @param result the resulting path
- * @param base the base path
- * @param extra the extra path to append
- */
+
 void browse_files(const char *directory) {
     char command[256];
     snprintf(command, sizeof(command), "xdg-open %s", directory);
@@ -590,44 +621,85 @@ void delete_item(const char *path) {
     }
 }
 
-void confirm_delete(WINDOW *notifwin, const char *path, bool *should_delete) {
-    *should_delete = false;
-    
-    // Show confirmation prompt
-    werase(notifwin);
-    mvwprintw(notifwin, 0, 0, "Delete '%s'? (y/n): ", path);
-    wrefresh(notifwin);
-    
-    // Wait for user input
-    int ch;
-    while ((ch = wgetch(notifwin)) != ERR) {
-        ch = tolower(ch);
-        if (ch == 'y') {
-            *should_delete = true;
-            break;
-        } else if (ch == 'n') {
-            break;
+/**
+ * Create a new directory by prompting the user for the directory name.
+ *
+ * @param win      The ncurses window to display prompts and messages.
+ * @param dir_path The directory where the new folder will be created.
+ * @return         true if the directory was created successfully, false if canceled or failed.
+ */
+bool create_new_directory(WINDOW *win, const char *dir_path) {
+    char dir_name[MAX_PATH_LENGTH] = {0};
+    int ch, index = 0;
+
+    // Prompt for the new directory name
+    werase(win);
+    mvwprintw(win, 0, 0, "New directory name (Esc to cancel): ");
+    wrefresh(win);
+
+    while ((ch = wgetch(win)) != '\n') {
+        if (ch == 27) { // Escape key pressed
+            show_notification(win, "❌ Directory creation canceled.");
+            should_clear_notif = false;
+            return false;
         }
+        if (ch == KEY_BACKSPACE || ch == 127) {
+            if (index > 0) {
+                index--;
+                dir_name[index] = '\0';
+            }
+        } else if (isprint(ch) && index < MAX_PATH_LENGTH - 1) {
+            dir_name[index++] = ch;
+            dir_name[index] = '\0';
+        }
+        werase(win);
+        mvwprintw(win, 0, 0, "New directory name (Esc to cancel): %s", dir_name);
+        wrefresh(win);
+    }
+
+    if (index == 0) {
+        show_notification(win, "❌ Invalid name, directory creation canceled.");
+        should_clear_notif = false;
+        return false;
+    }
+
+    // Construct the full path
+    char full_path[MAX_PATH_LENGTH * 2];
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, dir_name);
+
+    // Attempt to create the directory
+    if (mkdir(full_path, 0755) == 0) {
+        show_notification(win, "✅ Directory created: %s", dir_name);
+        should_clear_notif = false;
+        return true;
+    } else {
+        show_notification(win, "❌ Directory creation failed: %s", strerror(errno));
+        should_clear_notif = false;
+        return false;
     }
 }
 
 /**
  * Rename a file or directory by prompting the user for a new name.
  *
- * @param notifwin    The ncurses window to display prompts and notifications.
- * @param old_path    The full path to the existing file or directory.
+ * @param win      The ncurses window to display prompts and messages.
+ * @param old_path The full path to the existing file or directory.
+ * @return         true if rename was successful, false if canceled or failed.
  */
-void rename_item(WINDOW *win, const char *old_path) {
-    char new_name[MAX_PATH_LENGTH];
+bool rename_item(WINDOW *win, const char *old_path) {
+    char new_name[MAX_PATH_LENGTH] = {0};
     int ch, index = 0;
 
+    // Prompt for new name
     werase(win);
     mvwprintw(win, 0, 0, "Rename (Esc to cancel): ");
     wrefresh(win);
 
     while ((ch = wgetch(win)) != '\n') {
         if (ch == 27) { // Escape key pressed
-            return;
+            show_notification(win, "❌ Rename canceled.");
+            should_clear_notif = false; // Prevent immediate clearing
+            return false;
         }
         if (ch == KEY_BACKSPACE || ch == 127) {
             if (index > 0) {
@@ -644,31 +716,53 @@ void rename_item(WINDOW *win, const char *old_path) {
     }
 
     if (index == 0) {
-        mvwprintw(win, 0, 0, "Invalid name, rename cancelled");
-        return;
+        show_notification(win, "❌ Invalid name, rename canceled.");
+        should_clear_notif = false;
+        return false;
     }
 
-    char new_path[MAX_PATH_LENGTH * 2];
-    snprintf(new_path, sizeof(new_path), "%s/%s", dirname(strdup(old_path)), new_name);
+    // Construct the new path
+    char temp_path[MAX_PATH_LENGTH];
+    strncpy(temp_path, old_path, MAX_PATH_LENGTH - 1);
+    temp_path[MAX_PATH_LENGTH - 1] = '\0'; // Ensure null-termination
+    char *dir = dirname(temp_path);
 
+    char new_path[MAX_PATH_LENGTH * 2];
+    snprintf(new_path, sizeof(new_path), "%s/%s", dir, new_name);
+
+    // Attempt to rename
     if (rename(old_path, new_path) == 0) {
-        mvwprintw(win, 0, 0, "Renamed to: %s", new_name);
+        show_notification(win, "✅ Renamed to: %s", new_name);
+        should_clear_notif = false;
+        return true;
     } else {
-        mvwprintw(win, 0, 0, "Rename failed: %s", strerror(errno));
+        show_notification(win, "❌ Rename failed: %s", strerror(errno));
+        should_clear_notif = false;
+        return false;
     }
 }
 
-void create_new_file(WINDOW *win, const char *dir_path) {
-    char file_name[MAX_PATH_LENGTH];
+/**
+ * Create a new file by prompting the user for the file name.
+ *
+ * @param win      The ncurses window to display prompts and messages.
+ * @param dir_path The directory where the new file will be created.
+ * @return         true if the file was created successfully, false if canceled or failed.
+ */
+bool create_new_file(WINDOW *win, const char *dir_path) {
+    char file_name[MAX_PATH_LENGTH] = {0};
     int ch, index = 0;
 
+    // Prompt for the new file name
     werase(win);
     mvwprintw(win, 0, 0, "New file name (Esc to cancel): ");
     wrefresh(win);
 
     while ((ch = wgetch(win)) != '\n') {
         if (ch == 27) { // Escape key pressed
-            return;
+            show_notification(win, "❌ File creation canceled.");
+            should_clear_notif = false;
+            return false;
         }
         if (ch == KEY_BACKSPACE || ch == 127) {
             if (index > 0) {
@@ -685,19 +779,25 @@ void create_new_file(WINDOW *win, const char *dir_path) {
     }
 
     if (index == 0) {
-        mvwprintw(win, 0, 0, "Invalid name, file creation cancelled");
-        return;
+        show_notification(win, "❌ Invalid name, file creation canceled.");
+        should_clear_notif = false;
+        return false;
     }
 
+    // Construct the full path
     char full_path[MAX_PATH_LENGTH * 2];
     snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, file_name);
 
+    // Attempt to create the file
     FILE *file = fopen(full_path, "w");
     if (file) {
         fclose(file);
-        mvwprintw(win, 0, 0, "File created: %s", file_name);
+        show_notification(win, "✅ File created: %s", file_name);
+        should_clear_notif = false;
+        return true;
     } else {
-        mvwprintw(win, 0, 0, "File creation failed: %s", strerror(errno));
+        show_notification(win, "❌ File creation failed: %s", strerror(errno));
+        should_clear_notif = false;
+        return false;
     }
 }
-

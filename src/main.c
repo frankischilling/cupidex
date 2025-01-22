@@ -37,7 +37,6 @@
 #define INPUT_CHECK_INTERVAL 10        // Milliseconds for input checking (10ms)
 #define ERROR_BUFFER_SIZE 2048         // Increased buffer size for error messages
 #define NOTIFICATION_TIMEOUT_MS 250    // 250ms timeout for notifications
-#define MAX_DIR_NAME 256
 // Global variable definitions
 const char *BANNER_TEXT = NULL;  // To be initialized in main()
 const char *BUILD_INFO = "Version 1.0";
@@ -920,47 +919,6 @@ static void show_popup(const char *title, const char *fmt, ...) {
     delwin(popup);
 }
 
-/**
- * Function to create a new directory with user input
- *
- * @param current_directory The current directory where the new folder will be created
- * @param notification_window The ncurses window for displaying messages and user input
- */
-void create_new_directory(const char *current_directory, WINDOW *notification_window) {
-    char dir_name[MAX_DIR_NAME] = {0};
-
-    // Prompt user in the notification area
-    show_notification(notification_window, "Enter new directory name: ");
-
-    // Enable user input in notification area
-    echo();
-    wgetnstr(notification_window, dir_name, MAX_DIR_NAME - 1);
-    noecho();
-
-    // Trim leading/trailing whitespace
-    char *start = dir_name;
-    while (*start == ' ') start++;  // Skip leading spaces
-    char *end = start + strlen(start) - 1;
-    while (end > start && *end == ' ') *end-- = '\0'; // Trim trailing spaces
-
-    // Check if input is empty
-    if (strlen(start) == 0) {
-        show_notification(notification_window, "❌ Directory name cannot be empty.");
-        return;
-    }
-
-    // Construct the full path
-    char full_path[MAX_PATH_LENGTH];
-    snprintf(full_path, sizeof(full_path), "%s/%s", current_directory, start);
-
-    // Attempt to create the directory
-    if (mkdir(full_path, 0755) == 0) {
-        show_notification(notification_window, "✅ Created directory: %s", start);
-    } else {
-        show_notification(notification_window, "❌ Error: %s", strerror(errno));
-    }
-}
-
 /** Function to handle cleanup and exit
  *
  * @param r the exit code
@@ -1306,7 +1264,7 @@ int main() {
                 should_clear_notif = false;
             }
 
-            // 6) EDIT (Ctrl+E, for example)
+            // 6) EDIT 
             else if (ch == kb.key_edit) {
                 if (active_window == PREVIEW_WIN_ACTIVE) {
                     char file_path[MAX_PATH_LENGTH];
@@ -1320,7 +1278,7 @@ int main() {
                 }
             }
 
-            // 7) COPY (Ctrl+C)
+            // 7) COPY
             else if (ch == kb.key_copy) {
                 if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
                     char full_path[MAX_PATH_LENGTH];
@@ -1334,7 +1292,7 @@ int main() {
                 }
             }
 
-            // 8) PASTE (Ctrl+V)
+            // 8) PASTE
             else if (ch == kb.key_paste) {
                 if (active_window == DIRECTORY_WIN_ACTIVE && copied_filename[0] != '\0') {
                     paste_from_clipboard(state.current_directory, copied_filename);
@@ -1347,7 +1305,7 @@ int main() {
                 }
             }
 
-            // 9) CUT (Ctrl+X)
+            // 9) CUT 
             else if (ch == kb.key_cut) {
                 if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
                     char full_path[MAX_PATH_LENGTH];
@@ -1366,16 +1324,16 @@ int main() {
                 }
             }
 
-            // 10) DELETE (Ctrl+D)
+            // 10) DELETE
             else if (ch == kb.key_delete) {
                 if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
                     char full_path[MAX_PATH_LENGTH];
                     path_join(full_path, state.current_directory, state.selected_entry);
 
                     bool should_delete = false;
-                    confirm_delete(notifwin, state.selected_entry, &should_delete);
+                    bool delete_result = confirm_delete(state.selected_entry, &should_delete);
 
-                    if (should_delete) {
+                    if (delete_result && should_delete) {
                         delete_item(full_path);
                         reload_directory(&state.files, state.current_directory);
                         state.dir_window_cas.num_files = Vector_len(state.files);
@@ -1389,7 +1347,8 @@ int main() {
                 }
             }
 
-            // 11) RENAME (Ctrl+R)
+
+            // 11) RENAME
             else if (ch == kb.key_rename) {
                 if (active_window == DIRECTORY_WIN_ACTIVE && state.selected_entry) {
                     char full_path[MAX_PATH_LENGTH];
@@ -1411,7 +1370,7 @@ int main() {
                 }
             }
 
-            // 12) CREATE NEW (Ctrl+N)
+            // 12) CREATE NEW 
             else if (ch == kb.key_new) {
                 if (active_window == DIRECTORY_WIN_ACTIVE) {
                     create_new_file(notifwin, state.current_directory);
@@ -1431,7 +1390,7 @@ int main() {
             // 13 CREATE NEW DIR
             else if (ch == kb.key_new_dir) {
                 // implement
-                create_new_directory(state.current_directory, notifwin);
+                create_new_directory(notifwin, state.current_directory);
                 reload_directory(&state.files, state.current_directory);
                 state.dir_window_cas.num_files = Vector_len(state.files);
 

@@ -4,6 +4,7 @@
 
 #define MAX_PATH_LENGTH 1024  // Define it here consistently
 #define NOTIFICATION_TIMEOUT_MS 250  // 1 second timeout for notifications
+#define MAX_DIR_NAME 256
 
 #include <signal.h>  // For sig_atomic_t
 #include <time.h>

@@ -6,8 +6,6 @@
 
 #define SIZE int
 
-#define EDITOR_COMMAND "nano"  // Change this to your preferred default text editor
-
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -27,8 +25,8 @@ void copy_to_clipboard(const char *path);
 void paste_from_clipboard(const char *target_directory, const char *filename);
 void cut_and_paste(const char *path);
 void delete_item(const char *path);
-void confirm_delete(WINDOW *notifwin, const char *path, bool *should_delete);
-void rename_item(WINDOW *notifwin, const char *old_path);
-void create_new_file(WINDOW *notifwin, const char *current_dir);
-
+bool confirm_delete(const char *path, bool *should_delete);
+bool rename_item(WINDOW *notifwin, const char *old_path);
+bool create_new_file(WINDOW *win, const char *dir_path);
+bool create_new_directory(WINDOW *win, const char *dir_path);
 #endif // UTILS_H
