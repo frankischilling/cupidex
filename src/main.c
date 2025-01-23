@@ -1,5 +1,9 @@
 // File: main.c
 // -----------------------
+// This is the main entry point for the terminal-based file manager (cupidfm).
+// It uses ncurses for UI, supports keybindings, and includes directory navigation, 
+// file operations, and previews.
+
 #define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200112L
 #include <stdio.h>     // for snprintf
@@ -20,7 +24,6 @@
 #include <pthread.h>   // For threading
 #include <locale.h>    // For setlocale
 #include <errno.h>     // For errno
-
 // Local includes
 #include "utils.h"
 #include "vector.h"
@@ -29,6 +32,7 @@
 #include "main.h"
 #include "globals.h"
 #include "config.h"
+#include "ui.h"
 
 // Global resize flag
 volatile sig_atomic_t resized = 0;
@@ -62,209 +66,6 @@ typedef struct {
 void fix_cursor(CursorAndSlice *cas);
 
 // Function Implementations
-static const char* keycode_to_string(int keycode) {
-    static char buf[32];
-
-    // Define the base value for function keys
-    // Typically, KEY_F(1) is 265, so base = 264
-    const int FUNCTION_KEY_BASE = KEY_F(1) - 1;
-
-    // Handle function keys
-    if (keycode >= KEY_F(1) && keycode <= KEY_F(63)) {
-        int func_num = keycode - FUNCTION_KEY_BASE;
-        snprintf(buf, sizeof(buf), "F%d", func_num);
-        return buf;
-    }
-
-    // Handle control characters (Ctrl+A to Ctrl+Z)
-    if (keycode >= 1 && keycode <= 26) { // Ctrl+A (1) to Ctrl+Z (26)
-        char c = 'A' + (keycode - 1);
-        snprintf(buf, sizeof(buf), "^%c", c);
-        return buf;
-    }
-
-    // Handle special keys
-    switch (keycode) {
-        case KEY_UP: return "KEY_UP";
-        case KEY_DOWN: return "KEY_DOWN";
-        case KEY_LEFT: return "KEY_LEFT";
-        case KEY_RIGHT: return "KEY_RIGHT";
-        case '\t': return "Tab";
-        case KEY_BACKSPACE: return "Backspace";
-        // Add more special keys as needed
-        default:
-            // Handle printable characters
-            if (keycode >= 32 && keycode <= 126) { // Printable ASCII
-                snprintf(buf, sizeof(buf), "%c", keycode);
-                return buf;
-            }
-            return "UNKNOWN";
-    }
-}
-
-void show_notification(WINDOW *win, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    werase(win);
-    wmove(win, 0, 0);
-    vw_printw(win, format, args);
-    va_end(args);
-    wrefresh(win);
-    clock_gettime(CLOCK_MONOTONIC, &last_notification_time);
-}
-
-/** Function to show directory tree recursively
- *
- * @param window the window to display the directory tree
- * @param dir_path the path of the directory to display
- * @param level the current level of the directory tree
- * @param line_num the current line number in the window
- * @param max_y the maximum number of lines in the window
- * @param max_x the maximum number of columns in the window
- */
-void show_directory_tree(WINDOW *window, const char *dir_path, int level, int *line_num, int max_y, int max_x) {
-    if (level == 0) {
-        mvwprintw(window, 6, 2, "Directory Tree Preview:");
-        (*line_num)++;
-    }
-
-    // Early exit if we're already past visible area
-    if (*line_num >= max_y - 1) {
-        return;
-    }
-
-    DIR *dir = opendir(dir_path);
-    if (!dir) return;
-
-    struct dirent *entry;
-    struct stat statbuf;
-    char full_path[MAX_PATH_LENGTH];
-    size_t dir_path_len = strlen(dir_path);
-
-    // Define window size for entries
-    const int WINDOW_SIZE = 50; // Maximum entries to process at once
-    const int VISIBLE_ENTRIES = max_y - *line_num - 1; // Available lines in window
-    const int MAX_ENTRIES = MIN(WINDOW_SIZE, VISIBLE_ENTRIES);
-
-    struct {
-        char name[MAX_PATH_LENGTH];
-        bool is_dir;
-        mode_t mode;
-    } entries[WINDOW_SIZE];
-    int entry_count = 0;
-
-    // Only collect entries that will be visible
-    while ((entry = readdir(dir)) != NULL && entry_count < MAX_ENTRIES) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
-
-        size_t name_len = strlen(entry->d_name);
-        if (dir_path_len + name_len + 2 > MAX_PATH_LENGTH) continue;
-
-        strcpy(full_path, dir_path);
-        if (full_path[dir_path_len - 1] != '/') {
-            strcat(full_path, "/");
-        }
-        strcat(full_path, entry->d_name);
-
-        if (lstat(full_path, &statbuf) == -1) continue;
-
-        // Only store if it will be visible
-        if (*line_num + entry_count < max_y - 1) {
-            strncpy(entries[entry_count].name, entry->d_name, MAX_PATH_LENGTH - 1);
-            entries[entry_count].name[MAX_PATH_LENGTH - 1] = '\0';
-            entries[entry_count].is_dir = S_ISDIR(statbuf.st_mode);
-            entries[entry_count].mode = statbuf.st_mode;
-            entry_count++;
-        }
-    }
-    closedir(dir);
-
-    // Check if no entries were found
-    if (entry_count == 0) {
-        mvwprintw(window, *line_num, 2 + level * 2, "This directory is empty");
-        (*line_num)++;
-    }
-
-    // Initialize magic only if we have entries to display
-    magic_t magic_cookie = NULL;
-    if (entry_count > 0) {
-        magic_cookie = magic_open(MAGIC_MIME_TYPE);
-        if (magic_cookie != NULL) {
-            magic_load(magic_cookie, NULL);
-        }
-    }
-
-    // Display collected entries
-    for (int i = 0; i < entry_count && *line_num < max_y - 1; i++) {
-        const char *emoji;
-        if (entries[i].is_dir) {
-            emoji = "📁";
-        } else if (magic_cookie) { // if magic fails 
-            size_t name_len = strlen(entries[i].name);
-            if (dir_path_len + name_len + 2 <= MAX_PATH_LENGTH) {
-                strcpy(full_path, dir_path);
-                if (full_path[dir_path_len - 1] != '/') {
-                    strcat(full_path, "/");
-                }
-                strcat(full_path, entries[i].name);
-                const char *mime_type = magic_file(magic_cookie, full_path);
-                emoji = get_file_emoji(mime_type, entries[i].name);
-            } else {
-                emoji = "📄";
-            }
-        } else {
-            emoji = "📄";
-        }
-
-        mvwprintw(window, *line_num, 2 + level * 2, "%s %.*s", 
-                  emoji, max_x - 4 - level * 2, entries[i].name);
-
-        char perm[10];
-        snprintf(perm, sizeof(perm), "%o", entries[i].mode & 0777);
-        mvwprintw(window, *line_num, max_x - 10, "%s", perm);
-        (*line_num)++;
-
-        // Only recurse into directories if we have space
-        if (entries[i].is_dir && *line_num < max_y - 1) {
-            size_t name_len = strlen(entries[i].name);
-            if (dir_path_len + name_len + 2 <= MAX_PATH_LENGTH) {
-                strcpy(full_path, dir_path);
-                if (full_path[dir_path_len - 1] != '/') {
-                    strcat(full_path, "/");
-                }
-                strcat(full_path, entries[i].name);
-                show_directory_tree(window, full_path, level + 1, line_num, max_y, max_x);
-            }
-        }
-    }
-
-    if (magic_cookie) {
-        magic_close(magic_cookie);
-    }
-}
-
-bool is_hidden(const char *filename) {
-    return filename[0] == '.' && (strlen(filename) == 1 || (filename[1] != '.' && filename[1] != '\0'));
-}
-
-/** Function to get the total number of lines in a file
- *
- * @param file_path the path to the file
- * @return the total number of lines in the file
- */
-int get_total_lines(const char *file_path) {
-    FILE *file = fopen(file_path, "r");
-    if (!file) return 0;
-
-    int total_lines = 0;
-    char line[256];
-    while (fgets(line, sizeof(line), file)) {
-        total_lines++;
-    }
-
-    fclose(file);
-    return total_lines;
-}
 
 // Function to draw the directory window
 void draw_directory_window(
@@ -751,9 +552,10 @@ void navigate_right(AppState *state, char **current_directory, const char *selec
     wrefresh(notifwin);
 }
 
-/** Function to handle terminal window resize
+/**
+ * @brief Handles terminal window resize events.
  *
- * @param sig the signal number
+ * @param sig The signal number.
  */
 void handle_winch(int sig) {
     (void)sig;  // Suppress unused parameter warning
@@ -763,135 +565,7 @@ void handle_winch(int sig) {
 }
 
 /**
- * Function to draw and scroll the banner text
- *
- * @param window the banner window
- * @param text the text to scroll
- * @param build_info the build information to display
- * @param offset the current offset for scrolling
- */
-void draw_scrolling_banner(WINDOW *window, const char *text, const char *build_info, int offset) {
-    struct timespec current_time;
-    clock_gettime(CLOCK_MONOTONIC, &current_time);
-    
-    // Only update banner if enough time has passed
-    long time_diff = (current_time.tv_sec - last_scroll_time.tv_sec) * 1000000 +
-                    (current_time.tv_nsec - last_scroll_time.tv_nsec) / 1000;
-        
-    if (time_diff < BANNER_SCROLL_INTERVAL) {
-        return;  // Skip update if not enough time has passed
-    }
-    
-    int width = COLS - 2;
-    int text_len = strlen(text);
-    int build_len = strlen(build_info);
-    
-    // Calculate total length including padding
-    int total_len = width + text_len + build_len + 4;
-    
-    // Create the scroll text buffer
-    char *scroll_text = malloc(2 * total_len + 1);
-    if (!scroll_text) return;
-    
-    memset(scroll_text, ' ', 2 * total_len);
-    scroll_text[2 * total_len] = '\0';
-    
-    // Copy the text pattern twice for smooth wrapping
-    for (int i = 0; i < 2; i++) {
-        int pos = i * total_len;
-        memcpy(scroll_text + pos, text, text_len);
-        memcpy(scroll_text + pos + text_len + 2, build_info, build_len);
-    }
-    
-    // Draw the banner
-    werase(window);
-    box(window, 0, 0);
-    mvwprintw(window, 1, 1, "%.*s", width, scroll_text + offset);
-    wrefresh(window);
-    
-    free(scroll_text);
-    
-    // Update last scroll time
-    last_scroll_time = current_time;
-}
-
-// Function to handle banner scrolling in a separate thread
-void *banner_scrolling_thread(void *arg) {
-    WINDOW *window = (WINDOW *)arg;
-    int banner_offset = 0;
-    struct timespec last_update_time;
-    clock_gettime(CLOCK_MONOTONIC, &last_update_time);
-
-    int total_scroll_length = COLS + strlen(BANNER_TEXT) + strlen(BUILD_INFO) + 4;
-
-    while (1) {
-        struct timespec current_time;
-        clock_gettime(CLOCK_MONOTONIC, &current_time);
-        long time_diff = (current_time.tv_sec - last_update_time.tv_sec) * 1000000 +
-                         (current_time.tv_nsec - last_update_time.tv_nsec) / 1000;
-
-        if (time_diff >= BANNER_SCROLL_INTERVAL) {
-            draw_scrolling_banner(window, BANNER_TEXT, BUILD_INFO, banner_offset);
-            banner_offset = (banner_offset + 1) % total_scroll_length;
-            last_update_time = current_time;
-        }
-
-        // Sleep for a short duration to prevent busy-waiting
-        usleep(10000); // 10ms
-    }
-
-    return NULL;
-}
-
-void cleanup_temp_files() {
-    char command[1024];
-    snprintf(command, sizeof(command), "rm -rf /tmp/cupidfm_*_%d", getpid());
-    system(command);
-}
-
-static void show_popup(const char *title, const char *fmt, ...) {
-    // We use a small window in the center of the screen
-    int rows = 10;
-    int cols = 60;
-
-    // If not initialized, do it. Usually you have initscr() done already.
-    if (!stdscr) initscr();
-
-    // Center the popup
-    int starty = (LINES - rows) / 2;
-    int startx = (COLS - cols) / 2;
-
-    // Create the window
-    WINDOW *popup = newwin(rows, cols, starty, startx);
-    box(popup, 0, 0);
-
-    // Print a title in bold near the top
-    wattron(popup, A_BOLD);
-    mvwprintw(popup, 0, 2, "[ %s ]", title);
-    wattroff(popup, A_BOLD);
-
-    // Use varargs to display your custom message
-    va_list args;
-    va_start(args, fmt);
-    // Start printing text a few rows down so it’s readable
-    wmove(popup, 2, 2);
-    vw_printw(popup, fmt, args);
-    va_end(args);
-
-    // Refresh so the user sees it
-    wrefresh(popup);
-
-    // Wait for one key press
-    wgetch(popup);
-
-    // Cleanup
-    delwin(popup);
-}
-
-/** Function to handle cleanup and exit
- *
- * @param r the exit code
- * @param format the error message format
+ * @brief Main entry point for the application.
  */
 int main() {
     // Initialize ncurses
