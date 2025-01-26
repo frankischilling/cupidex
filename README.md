@@ -210,11 +210,11 @@ With these steps, you can **fully customize** your keybindings in `~/.cupidfmrc`
   - [ ] Standard shortcuts (Ctrl+X, Ctrl+C, Ctrl+V)
   - [ ] Add undo/redo functionality in edit mode
   - [ ] Implement proper text selection in edit mode
-- [ ] Add file operations:
+- [X] Add file operations:
   - [X] Copy/paste files and directories
-  - [ ] Create new file/directory
+  - [X] Create new file/directory
   - [X] Delete file/directory
-  - [ ] Rename file/directory
+  - [X] Rename file/directory
 - [ ] Add a quick select feature for selecting file names, dir names, and current directory
 - [ ] Implement file search functionality
 - [ ] Add file filtering options
@@ -222,13 +222,12 @@ With these steps, you can **fully customize** your keybindings in `~/.cupidfmrc`
 - [X] Add configuration file support for customizing:
   - [X] Key bindings
   - [ ] Color schemes
-  - [ ] Default text editor
+  - [ ] Default text editor (using in house editor)
   - [ ] File associations
   - [ ] Change default text preview files
 - [ ] Add image preview
 - [ ] Basic file dialog for web and other applications
 - [ ] Basic install script for building, installing nerd fonts and other dependencies, and then moving the executable to /usr/bin
-- [ ] Better config parsing (use multiple modifiers)
 
 ### Key Features to Implement
 
