@@ -200,6 +200,7 @@ With these steps, you can **fully customize** your keybindings in `~/.cupidfmrc`
 - [ ] Fix text buffer not scrolling to the right when typing and hitting the border of the window
 
 ### Features
+- [ ] Fix dir size calc not working (wont calc files inside)
 - [ ] Enable scrolling for tree preview in the preview window when tabbed over
 - [ ] Add preview support for `.zip` and `.tar` files
 - [ ] Implement syntax highlighting for supported file types
