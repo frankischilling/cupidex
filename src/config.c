@@ -22,9 +22,8 @@
 
     // Helper function to trim both leading and trailing whitespace
     static char* trim(char *s) {
-        s = ltrim(s);
         rtrim(s);
-        return s;
+        return ltrim(s);
     }
 
     /**
@@ -205,23 +204,6 @@
         fclose(fp);
         return error_count;
     }
-
-
-    /**
-     * Utility function to parse textual representations of keys:
-     *   parse_key("KEY_UP") -> KEY_UP
-     *   parse_key("^C")     -> 3
-     *   parse_key("F1")     -> KEY_F(1)
-     *   parse_key("Tab")    -> '\t'
-     *   parse_key("x")      -> 'x'
-     *
-     * Returns -1 on failure.
-     */
-    #include <ctype.h>
-    #include <string.h>
-    #include <ncurses.h>
-    #include <stdio.h>
-    #include <stdlib.h>
 
     /**
      * Utility function to parse textual representations of keys:

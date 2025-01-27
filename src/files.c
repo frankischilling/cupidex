@@ -100,10 +100,7 @@ const char *FileAttr_get_name(FileAttr fa) {
  * @return true if the file type is supported, false otherwise
  */
 bool FileAttr_is_dir(FileAttr fa) {
-    if (fa == NULL) {
-        return false; // Treat NULL as a non-directory
-    }
-    return fa->is_dir;
+    return fa != NULL && fa->is_dir;
 }
 /**
  * Function to format a file size in a human-readable format
