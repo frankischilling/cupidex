@@ -247,8 +247,10 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     // Display File Size or Directory Size
     if (S_ISDIR(file_stat.st_mode)) {
         long dir_size = get_directory_size(file_path);
-        if (dir_size == -2) {
-            mvwprintw(window, 2, 2, "%-*s %s", label_width, "📁 Directory Size:", "Uncalculable");
+        if (dir_size != -2) {
+            char fileSizeStr[20] = "Uncalculable";
+            format_file_size(fileSizeStr, dir_size);
+            mvwprintw(window, 2, 2, "%-*s %s", label_width, "📁 Directory Size:", fileSizeStr);
         } else {
             char fileSizeStr[20];
             format_file_size(fileSizeStr, dir_size);
