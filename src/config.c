@@ -43,9 +43,8 @@ static void rtrim(char *s) {
  * @return A pointer to the trimmed string.
  */
 static char* trim(char *s) {
-    s = ltrim(s);  // Remove leading whitespace
-    rtrim(s);      // Remove trailing whitespace
-    return s;
+   rtrim(s);
+   return ltrim(s);
 }
 
 /**
