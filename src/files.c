@@ -24,7 +24,6 @@
 #include "files.h"                 // for FileAttributes, FileAttr, MAX_PATH_LENGTH
 #include "globals.h"
 #include "config.h"
-
 #define MIN_INT_SIZE_T(x, y) (((size_t)(x) > (y)) ? (y) : (x))
 #define FILES_BANNER_UPDATE_INTERVAL 50000 // 50ms in microseconds
 
@@ -59,21 +58,18 @@ const char *supported_mime_types[] = {
 };
 
 size_t num_supported_mime_types = sizeof(supported_mime_types) / sizeof(supported_mime_types[0]);
-
 // FileAttributes structure
 struct FileAttributes {
     char *name;  //
     ino_t inode; // Change from int inode;
     bool is_dir;
 };
-
 // TextBuffer structure
 typedef struct {
     char **lines;      // Dynamic array of strings
     int num_lines;     // Current number of lines
     int capacity;      // Total capacity of the array
 } TextBuffer;
-
 /**
  * Function to initialize a TextBuffer
  *
@@ -84,7 +80,6 @@ void init_text_buffer(TextBuffer *buffer) {
     buffer->num_lines = 0;
     buffer->lines = malloc(sizeof(char*) * buffer->capacity);
 }
-
 /**
  * Function to free the memory allocated for a TextBuffer
  *
@@ -98,7 +93,6 @@ const char *FileAttr_get_name(FileAttr fa) {
         return "Unknown";
     }
 }
-
 /**
  * Function to check if a file type is supported for preview
  *
@@ -106,9 +100,31 @@ const char *FileAttr_get_name(FileAttr fa) {
  * @return true if the file type is supported, false otherwise
  */
 bool FileAttr_is_dir(FileAttr fa) {
-    return fa != NULL && fa->is_dir;
+    if (fa == NULL) {
+        return false; // Treat NULL as a non-directory
+    }
+    return fa->is_dir;
 }
-
+/**
+ * Function to format a file size in a human-readable format
+ *
+ * @param buffer the buffer to store the formatted file size
+ * @param size the size of the file
+ * @return the formatted file size
+ */
+char* format_file_size(char *buffer, size_t size) {
+    // iB for multiples of 1024, B for multiples of 1000
+    // so, KiB = 1024, KB = 1000
+    const char *units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
+    int i = 0;
+    double fileSize = (double)size;
+    while (fileSize >= 1024 && i < 4) {
+        fileSize /= 1024;
+        i++;
+    }
+    sprintf(buffer, "%.2f %s", fileSize, units[i]);
+    return buffer;
+}
 /**
  * Function to create a new FileAttr
  *
@@ -137,7 +153,6 @@ FileAttr mk_attr(const char *name, bool is_dir, ino_t inode) {
         return NULL;
     }
 }
-
 // Function to free the allocated memory for a FileAttr
 void free_attr(FileAttr fa) {
     if (fa != NULL) {
@@ -145,7 +160,6 @@ void free_attr(FileAttr fa) {
         free(fa);
     }
 }
-
 /**
  * Function to append files in a directory to a Vector
  *
@@ -224,7 +238,6 @@ long get_directory_size(const char *dir_path) {
     closedir(dir);
     return total_size;
 }
-
 /**
  * Function to display file information in a window
  *
@@ -241,8 +254,8 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
         return;
     }
 
-    // Define a fixed width for labels to ensure alignment
-    int label_width = 20;
+    // NEW: get from KeyBindings or from wherever you store it:
+    int label_width = g_kb.info_label_width;  
 
     // Display File Size or Directory Size
     if (S_ISDIR(file_stat.st_mode)) {
@@ -292,7 +305,6 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     }
     magic_close(magic_cookie);
 }
-
 /**
  * Function to render and manage scrolling within the text buffer
  *
@@ -398,7 +410,11 @@ void render_text_buffer(WINDOW *window, TextBuffer *buffer, int *start_line, int
  * @param file_path the path to the file to edit
  * @param notification_window the window to display notifications
  */
-void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notification_window, KeyBindings *kb) {
+void edit_file_in_terminal(WINDOW *window, 
+                           const char *file_path, 
+                           WINDOW *notification_window, 
+                           KeyBindings *kb)
+{
     is_editing = 1;
 
     // Open the file for reading and writing
@@ -457,7 +473,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
         }
         text_buffer.lines[text_buffer.num_lines++] = strdup(line);
     }
-
     if (is_empty) {
         // If file is empty, start with one blank line
         text_buffer.lines[text_buffer.num_lines++] = strdup("");
@@ -528,7 +543,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
                 }
             }
         }
-
         // 4) Move down
         else if (ch == kb->edit_down) {
             if (cursor_line < text_buffer.num_lines - 1) {
@@ -538,7 +552,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
                 }
             }
         }
-
         // 5) Move left
         else if (ch == kb->edit_left) {
             if (cursor_col > 0) {
@@ -549,7 +562,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
                 cursor_col = strlen(text_buffer.lines[cursor_line]);
             }
         }
-
         // 6) Move right
         else if (ch == kb->edit_right) {
             int line_len = (int)strlen(text_buffer.lines[cursor_line]);
@@ -561,7 +573,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
                 cursor_col = 0;
             }
         }
-
         // 7) Enter / new line
         else if (ch == '\n') {
             char *current_line = text_buffer.lines[cursor_line];
@@ -595,7 +606,6 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
             cursor_line++;
             cursor_col = 0;
         }
-
         // 8) Backspace
         else if (ch == kb->edit_backspace) {
             if (cursor_col > 0) {
@@ -626,12 +636,10 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
                 cursor_col = prev_len;
             }
         }
-        
         // 9) Possibly an extra “exit edit” keystroke
         else if (ch == kb->edit_quit) {
             exit_edit_mode = true;
         }
-
         // 10) Printable characters
         else if (ch >= 32 && ch <= 126) {
             char *curr_line = text_buffer.lines[cursor_line];
@@ -661,6 +669,7 @@ void edit_file_in_terminal(WINDOW *window, const char *file_path, WINDOW *notifi
     }
     free(text_buffer.lines);
 }
+
 
 /**
  * Checks if the given file has a supported MIME type.

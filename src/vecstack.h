@@ -1,55 +1,27 @@
-// ─────────────────────────────────────────────────────────────
-// VecStack Header File
-// Provides a dynamic stack implementation for generic pointers.
-// ─────────────────────────────────────────────────────────────
+// vecstack.h
 
 #ifndef VECSTACK_H
 #define VECSTACK_H
 
 #include <stddef.h> // For size_t
 
-// ─────────────────────────────────────────────────────────────
-// Structure Definition
-// ─────────────────────────────────────────────────────────────
-
-/**
- * @struct VecStack
- * @brief A dynamic stack implementation for storing generic pointers.
- */
+// Define the VecStack structure
 typedef struct VecStack {
-    void **items;      ///< Array of pointers to store stack items.
-    size_t size;       ///< Current number of items in the stack.
-    size_t capacity;   ///< Maximum capacity of the stack before resizing.
+    void **items;      // Array of pointers to store stack items
+    size_t size;       // Current number of items in the stack
+    size_t capacity;   // Maximum capacity of the stack
 } VecStack;
 
-// ─────────────────────────────────────────────────────────────
-// Function Declarations
-// ─────────────────────────────────────────────────────────────
-
-/**
- * @brief Initializes a VecStack instance.
- * @param stack Pointer to the VecStack structure to initialize.
- */
+// Function to initialize the stack
 void VecStack_init(VecStack *stack);
 
-/**
- * @brief Pushes an item onto the stack.
- * @param stack Pointer to the VecStack structure.
- * @param item Pointer to the item to push onto the stack.
- */
+// Function to push an item onto the stack
 void VecStack_push(VecStack *stack, void *item);
 
-/**
- * @brief Pops an item from the stack.
- * @param stack Pointer to the VecStack structure.
- * @return Pointer to the popped item, or NULL if the stack is empty.
- */
+// Function to pop an item from the stack
 void *VecStack_pop(VecStack *stack);
 
-/**
- * @brief Cleans up the stack by freeing allocated memory.
- * @param stack Pointer to the VecStack structure.
- */
+// Function to clean up the stack
 void VecStack_bye(VecStack *stack);
 
 #endif // VECSTACK_H
