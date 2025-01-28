@@ -1,27 +1,25 @@
-// vecstack.h
-
 #ifndef VECSTACK_H
 #define VECSTACK_H
 
-#include <stddef.h> // For size_t
+#include "vector.h"  // the dynamic array of void*
 
-// Define the VecStack structure
-typedef struct VecStack {
-    void **items;      // Array of pointers to store stack items
-    size_t size;       // Current number of items in the stack
-    size_t capacity;   // Maximum capacity of the stack
+typedef struct {
+    Vector v;
 } VecStack;
 
-// Function to initialize the stack
-void VecStack_init(VecStack *stack);
+// "Constructor" to create a new empty stack
+VecStack VecStack_empty();
 
-// Function to push an item onto the stack
-void VecStack_push(VecStack *stack, void *item);
+// Push an element
+void     VecStack_push(VecStack *stack, void *el);
 
-// Function to pop an item from the stack
-void *VecStack_pop(VecStack *stack);
+// Pop (removes last element, returns it, or NULL if stack empty)
+void    *VecStack_pop(VecStack *stack);
 
-// Function to clean up the stack
-void VecStack_bye(VecStack *stack);
+// Peek the top element (no remove)
+void    *VecStack_peek(VecStack *stack);
+
+// Frees underlying Vector
+void     VecStack_bye(VecStack *stack);
 
 #endif // VECSTACK_H

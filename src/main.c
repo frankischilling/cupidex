@@ -898,8 +898,7 @@ int main() {
     setlocale(LC_ALL, "");
     
     // Initialize directory stack
-    VecStack_init(&directoryStack);
-
+    directoryStack = VecStack_empty();
     // Ignore Ctrl+C at the OS level so we can handle it ourselves
     struct sigaction sa;
     sa.sa_handler = SIG_IGN;      // SIG_IGN means "ignore this signal"
