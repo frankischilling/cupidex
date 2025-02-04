@@ -52,4 +52,7 @@ void load_default_keybindings(KeyBindings *kb);
  */
 int load_config_file(KeyBindings *kb, const char *filepath, char *error_buffer, size_t buffer_size);
 
+// The macro stringifies the field name and, if it matches, assigns the parsed value.
+#define CUPID_CFGCMP(x) else if (strcasecmp(name, #x) == 0) { kb->x = parsed; }
+
 #endif // CONFIG_H

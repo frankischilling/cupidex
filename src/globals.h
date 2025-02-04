@@ -17,6 +17,7 @@
 #define INPUT_CHECK_INTERVAL 10        // Milliseconds for input checking (10ms)
 #define ERROR_BUFFER_SIZE 2048         // Increased buffer size for error messages
 #define NOTIFICATION_TIMEOUT_MS 250    // 250ms timeout for notifications
+#define PATH_MAX 4096
 
 extern volatile sig_atomic_t resized;
 extern volatile sig_atomic_t is_editing;

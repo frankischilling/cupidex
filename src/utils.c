@@ -13,6 +13,7 @@
 #include <sys/stat.h>  // for stat, S_ISDIR
 #include <ctype.h>     // for isprint
 #include <libgen.h>    // for dirname() and basename()
+#include <limits.h>    // for PATH_MAX
 
 // Local includes
 #include "utils.h"
@@ -489,6 +490,51 @@ void copy_to_clipboard(const char *path) {
     unlink(temp_path);
 }
 
+// Helper function to generate a unique filename in target_directory.
+// If target_directory/filename exists, the function returns a new filename
+// such as "filename (1).ext", "filename (2).ext", etc.
+static void generate_unique_filename(const char *target_directory, const char *filename, char *unique_name, size_t unique_size) {
+    char target_path[PATH_MAX];
+    // Create the initial target path.
+    snprintf(target_path, sizeof(target_path), "%s/%s", target_directory, filename);
+    
+    // If no file exists with this name, use it.
+    if (access(target_path, F_OK) != 0) {
+        strncpy(unique_name, filename, unique_size);
+        unique_name[unique_size - 1] = '\0';
+        return;
+    }
+    
+    // Otherwise, split the filename into base and extension.
+    char base[PATH_MAX];
+    char ext[PATH_MAX];
+    const char *dot = strrchr(filename, '.');
+    if (dot != NULL) {
+        size_t base_len = dot - filename;
+        if (base_len >= sizeof(base))
+            base_len = sizeof(base) - 1;
+        strncpy(base, filename, base_len);
+        base[base_len] = '\0';
+        strncpy(ext, dot, sizeof(ext));
+        ext[sizeof(ext) - 1] = '\0';
+    } else {
+        strncpy(base, filename, sizeof(base));
+        base[sizeof(base) - 1] = '\0';
+        ext[0] = '\0';
+    }
+    
+    // Append a counter until we get a name that does not exist.
+    int counter = 1;
+    while (1) {
+        snprintf(unique_name, unique_size, "%s (%d)%s", base, counter, ext);
+        snprintf(target_path, sizeof(target_path), "%s/%s", target_directory, unique_name);
+        if (access(target_path, F_OK) != 0) {
+            break;
+        }
+        counter++;
+    }
+}
+
 // paste files to directory the user in
 void paste_from_clipboard(const char *target_directory, const char *filename) {
     char temp_path[512];
@@ -501,13 +547,13 @@ void paste_from_clipboard(const char *target_directory, const char *filename) {
         fprintf(stderr, "Error: Unable to read from clipboard.\n");
         return;
     }
-
+    
     FILE *temp = fopen(temp_path, "r");
     if (!temp) {
         unlink(temp_path);
         return;
     }
-
+    
     char source_path[512];
     int is_directory;
     char operation[10] = {0};
@@ -519,30 +565,32 @@ void paste_from_clipboard(const char *target_directory, const char *filename) {
     }
     fclose(temp);
     unlink(temp_path);
-
-    // Check if this is a cut operation
+    
+    // Check if this is a cut operation.
     bool is_cut = (operation[0] == 'C' && operation[1] == 'U' && operation[2] == 'T');
-
+    
+    // Generate a unique file name if one already exists in target_directory.
+    char unique_filename[512];
+    generate_unique_filename(target_directory, filename, unique_filename, sizeof(unique_filename));
+    
     if (is_cut) {
-        // Get the temporary storage path
+        // Get the temporary storage path (for cut operations).
         char temp_storage[MAX_PATH_LENGTH];
         snprintf(temp_storage, sizeof(temp_storage), "/tmp/cupidfm_cut_storage_%d", getpid());
         
-        // Move from temporary storage to target
+        // Move from temporary storage to target directory with the unique name.
         char mv_command[2048];
         snprintf(mv_command, sizeof(mv_command), "mv \"%s\" \"%s/%s\"", 
-                temp_storage, target_directory, filename);
-        
+                 temp_storage, target_directory, unique_filename);
         if (system(mv_command) == -1) {
             fprintf(stderr, "Error: Unable to move file from temporary storage.\n");
             return;
         }
     } else {
-        // Handle regular copy operation as before
+        // Handle regular copy operation.
         char cp_command[2048];
         snprintf(cp_command, sizeof(cp_command), "cp %s \"%s\" \"%s/%s\"",
-                is_directory ? "-r" : "", source_path, target_directory, filename);
-        
+                 is_directory ? "-r" : "", source_path, target_directory, unique_filename);
         if (system(cp_command) == -1) {
             fprintf(stderr, "Error: Unable to copy file.\n");
         }

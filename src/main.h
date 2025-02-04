@@ -5,9 +5,8 @@
 #include <time.h>      // For struct timespec
 #include <pthread.h>   // For mutex
 #include <signal.h>    // For sig_atomic_t
-
 #include "globals.h"
-#include "ui.h"
+
 // Global variables
 extern const char *BANNER_TEXT;
 extern const char *BUILD_INFO;

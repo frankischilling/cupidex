@@ -255,7 +255,7 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
     int label_width = g_kb.info_label_width;  
 
     // Display File Size or Directory Size
-    if (S_ISDIR(file_stat.st_mode)) {
+   if (S_ISDIR(file_stat.st_mode)) {
         long dir_size = get_directory_size(file_path);
         
         char fileSizeStr[20] = "Uncalculable";
@@ -267,7 +267,6 @@ void display_file_info(WINDOW *window, const char *file_path, int max_x) {
         format_file_size(fileSizeStr, file_stat.st_size);
         mvwprintw(window, 2, 2, "%-*s %s", label_width, "📏 File Size:", fileSizeStr); // Updated with emoji
     }
-
     // Display MIME type using libmagic
     magic_t magic_cookie = magic_open(MAGIC_MIME_TYPE | MAGIC_SYMLINK | MAGIC_CHECK);
     if (magic_cookie == NULL) {
