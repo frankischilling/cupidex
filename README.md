@@ -37,6 +37,68 @@ If emojis aren't displaying correctly:
 
 Note: Some terminal emulators like Alacritty, iTerm2, Konsole, and Kitty are known to work better with unicode/emojis. 
 
+## Prerequisites
+
+To build and run cupidfm, you must have the following packages installed:
+
+- **A C Compiler & Build Tools** (e.g. `gcc`, `make`)
+- **ncurses** development libraries (for terminal handling)
+- **libmagic** development libraries (for MIME type detection)
+- **xclip** (for clipboard support)
+
+### Installing Dependencies on Ubuntu/Debian
+
+Open a terminal and run:
+
+```bash
+sudo apt update
+sudo apt install build-essential libncurses-dev libmagic-dev xclip
+```
+
+### Installing Dependencies on Arch Linux
+
+Open a terminal and run:
+
+```bash
+sudo pacman -Syu
+sudo pacman -S base-devel ncurses file xclip
+```
+
+*Notes:*
+- On Arch, the package named **file** provides libmagic.
+- The package **base-devel** installs gcc, make, and other essential build tools.
+
+---
+
+## Building the Project
+
+To compile the project, run the provided build script:
+
+```bash
+./dev.sh
+```
+
+This script invokes `make` (with predefined flags) to compile the source code and produce an executable named `cupidfm`.
+
+### Compilation Flags
+
+The build script uses flags such as:
+- `-Wall -Wextra -pedantic` to enable warnings
+- Additional warnings (`-Wshadow -Werror -Wstrict-overflow`)
+- Sanitizers (`-fsanitize=address -fsanitize=undefined`) for debugging
+
+---
+
+## Running the Program
+
+After building, start cupidfm with:
+
+```bash
+./cupidfm
+```
+
+Error logs (if any) will be saved to `log.txt`.
+
 # Features
 
 - Navigate directories using arrow keys
@@ -446,60 +508,6 @@ The **Command Line Interface (CLI)** for **cupidfm** will introduce a powerful w
 - [X] Add tree structure visualization with proper icons and indentation
 - [X] File info not using emojis
 - [X] Add text display on tree preview when user enters an empty dir and on dir preview
-
-## Prerequisites
-
-To build and run CupidFM, you need the following dependencies installed:
-
-- `gcc` (GNU Compiler Collection)
-- `make` (build automation tool)
-- `ncurses` library for terminal handling
-- `libmagic` for MIME type detection based on file content
-- `xclip ` required for copying file paths to the system clipboard
-
-### Installing Dependencies on Ubuntu
-
-Run the following command to install the necessary packages:
-
-```bash
-sudo apt update
-sudo apt install build-essential libncurses-dev libmagic-dev
-```
-
-## Building the Project
-
-To compile the project, run:
-
-```bash
-./dev.sh
-```
-
-This script will use `make` with predefined flags to compile the source code and produce an executable named `cupidfm`.
-
-### Compilation Flags
-
-The script uses several compilation flags:
-
-- `-Wall -Wextra -pedantic`: Enable warnings
-- `-Wshadow -Werror -Wstrict-overflow`: Additional strictness for code
-- `-fsanitize=address -fsanitize=undefined`: Enable sanitization for debugging
-
-## Running the Program
-
-After compilation, you can run the program:
-
-```bash
-./cupidfm
-```
-
-This will start cupidfm. Error logs will be saved in `log.txt`.
-
-## File Structure
-
-- `src/`: Contains the source code files
-- `dev.sh`: Script for compiling the project
-- `Makefile`: Used by `make` for the build process
-- `LICENSE`, `README.md`: Documentation and license information
 
 ## Usage
 
