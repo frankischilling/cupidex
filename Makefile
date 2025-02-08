@@ -1,4 +1,4 @@
-CUPID_LIBS=-Isrc -lcurses -lmagic
+CUPID_LIBS=-Isrc -lncursesw -lmagic
 CUPID_FLAGS=--std=c2x
 
 all: clean cupidfm
